@@ -26,18 +26,40 @@ The system SHALL derive `platform` and `store_name` from the source filename.
 - THEN the system identifies `platform` as `拼多多`
 - AND identifies `store_name` as `黄小惠米面旗舰店`
 
+#### Scenario: Parse Taobao-like filename
+- GIVEN a filename like `3月天猫-庄品健大米1号店.xlsx`
+- WHEN the file is processed
+- THEN the system identifies `platform` as `天猫`
+- AND identifies `store_name` as `庄品健大米1号店`
+
 ### Requirement: Source Template Detection
 The system SHALL detect supported source templates before parsing file content.
 
 #### Scenario: Detect Pinduoduo CSV
 - GIVEN a `CSV` file with the expected 拼多多表头
 - WHEN the file is evaluated
-- THEN the system selects the `pdd_csv` parser
+- THEN the system selects the `pdd_table` parser
+
+#### Scenario: Detect Pinduoduo workbook
+- GIVEN an `XLSX` or `XLS` file with the expected 拼多多表头
+- WHEN the file is evaluated
+- THEN the system selects the `pdd_table` parser
 
 #### Scenario: Detect Taobao workbook
 - GIVEN an `XLSX` or `XLS` file with the expected 淘宝表头
 - WHEN the file is evaluated
-- THEN the system selects the `tb_xlsx` parser
+- THEN the system selects the `tb_table` parser
+
+#### Scenario: Detect Taobao CSV
+- GIVEN a `CSV` file with the expected 淘宝系表头
+- WHEN the file is evaluated
+- THEN the system selects the `tb_table` parser
+
+#### Scenario: Ignore non-bill workbook
+- GIVEN a directory also contains a generated result workbook
+- WHEN the system scans source files
+- THEN unsupported non-template files are ignored
+- AND the batch run continues
 
 ### Requirement: Time And Amount Normalization
 The system SHALL normalize source records into a common structure using a derived month and a signed amount.
@@ -59,18 +81,23 @@ The system SHALL normalize source records into a common structure using a derive
 - AND skips that record from aggregation
 
 ### Requirement: Taobao Composite Classification
-The system SHALL classify Taobao records using the normalized remark and business description as a composite key.
+The system SHALL classify Taobao-like records using the normalized remark and business description as a composite key.
 
-#### Scenario: Build Taobao classification key
-- GIVEN a Taobao record with `remark_norm` and `biz_desc`
+#### Scenario: Build Taobao-like classification key
+- GIVEN a Taobao-like record with `remark_norm` and `biz_desc`
 - WHEN the record is classified
 - THEN the system uses `remark_norm —— biz_desc` as the match key
 
 #### Scenario: Ignore empty composite key
-- GIVEN a Taobao record where remark and business description are both empty
+- GIVEN a Taobao-like record where remark and business description are both empty
 - WHEN the record is classified
 - THEN the system marks the record as ignored
 - AND excludes it from aggregation
+
+#### Scenario: Share Taobao rules with Tmall
+- GIVEN a `天猫` record with a known `remark_norm —— biz_desc`
+- WHEN the record is classified
+- THEN the system applies the same rule set as `淘宝`
 
 ### Requirement: Pinduoduo Business Description Classification
 The system SHALL classify Pinduoduo records primarily by `biz_desc`.
@@ -91,6 +118,22 @@ The system SHALL classify Pinduoduo records primarily by `biz_desc`.
 - WHEN the record is classified
 - THEN the system assigns `detail_category` as `虚假发货`
 - AND assigns `major_category` as `售后费用`
+
+### Requirement: Unmapped Records Fallback
+The system SHALL keep unmapped business items in the exported summary instead of dropping them.
+
+#### Scenario: Fallback to uncategorized
+- GIVEN a record whose classification key does not exist in configured rules
+- WHEN the record is classified
+- THEN the system assigns `detail_category` as `暂未分类`
+- AND assigns `major_category` as `暂未分类`
+- AND the record is still included in aggregation
+
+#### Scenario: Warn user about unmapped item
+- GIVEN one or more records are classified as `暂未分类`
+- WHEN export completes
+- THEN the system shows a warning dialog
+- AND the warning contains the store name and unmatched business item text
 
 ### Requirement: Category Summary Export
 The system SHALL export a single-sheet Excel report containing category summary rows.
@@ -119,3 +162,31 @@ The system SHALL prompt the user to choose the output path before exporting a re
 - WHEN the export process starts
 - THEN the system opens a save-file dialog
 - AND exports the report to the selected `.xlsx` path
+
+### Requirement: Responsive Long-Running Processing
+The system SHALL remain responsive while processing large batches and SHALL display progress to the user.
+
+#### Scenario: Process in background
+- GIVEN the user starts a report run on a large dataset
+- WHEN the system is processing files
+- THEN the UI remains responsive
+- AND the main window does not block on the long-running task
+
+#### Scenario: Show progress
+- GIVEN the system is scanning, parsing, aggregating, or exporting
+- WHEN the run is in progress
+- THEN the UI shows progress text
+- AND the UI shows a progress bar
+
+### Requirement: Copyable Error And Warning Messages
+The system SHALL allow users to copy exception and warning messages from the UI.
+
+#### Scenario: Copy selected messages
+- GIVEN the message list contains one or more items
+- WHEN the user clicks `复制选中`
+- THEN the system copies the selected items to the clipboard
+
+#### Scenario: Copy all messages
+- GIVEN the message list contains one or more items
+- WHEN the user clicks `复制全部`
+- THEN the system copies the full list to the clipboard
