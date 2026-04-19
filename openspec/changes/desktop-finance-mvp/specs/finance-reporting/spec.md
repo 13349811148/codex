@@ -80,11 +80,17 @@ The system SHALL classify Pinduoduo records primarily by `biz_desc`.
 - WHEN the record is classified
 - THEN the system assigns both `detail_category` and `major_category`
 
-#### Scenario: Handle unmatched rule
-- GIVEN a Pinduoduo record whose `biz_desc` has no matching rule
+#### Scenario: Pinduoduo after-sale adjustment
+- GIVEN a Pinduoduo record whose `biz_desc` is `0040003|售后费用-运费补偿`
 - WHEN the record is classified
-- THEN the system records a classification error
-- AND excludes the record from aggregation
+- THEN the system assigns `detail_category` as `运费补偿`
+- AND assigns `major_category` as `售后费用`
+
+#### Scenario: Pinduoduo false-shipment adjustment
+- GIVEN a Pinduoduo record whose `biz_desc` is `0040005|售后费用-虚假发货`
+- WHEN the record is classified
+- THEN the system assigns `detail_category` as `虚假发货`
+- AND assigns `major_category` as `售后费用`
 
 ### Requirement: Category Summary Export
 The system SHALL export a single-sheet Excel report containing category summary rows.
@@ -93,7 +99,17 @@ The system SHALL export a single-sheet Excel report containing category summary 
 - GIVEN normalized and classified records
 - WHEN aggregation completes
 - THEN the system exports one row per `month + store_name + platform + major_category + detail_category`
-- AND the sheet contains `月份`、`店铺名`、`平台`、`大类`、`明细分类`、`金额`、`记录数`
+- AND the sheet contains `月份`、`店铺名`、`平台`、`大类`、`明细分类`
+
+### Requirement: Debit Credit Amount Columns
+The system SHALL export separate income and expense amount columns instead of a single net amount column.
+
+#### Scenario: Export debit-credit style amounts
+- GIVEN normalized and classified records
+- WHEN aggregation completes
+- THEN the sheet contains `收入金额` and `支出金额`
+- AND positive values are aggregated into `收入金额`
+- AND negative values are aggregated by absolute value into `支出金额`
 
 ### Requirement: User-Selected Export Path
 The system SHALL prompt the user to choose the output path before exporting a report.

@@ -2,16 +2,16 @@ from __future__ import annotations
 
 from typing import List
 
+from domain.amount_normalizer import normalize_amount
+from domain.remark_normalizer import normalize_taobao_remark
+from models.dto import NormalizedRecord, RunResult
 from repositories.config_repository import ConfigRepository
 from repositories.run_log_repository import RunLogRepository
 from services.aggregate_service import AggregateService
 from services.classify_service import ClassifyService
 from services.export_service import ExportService
 from services.import_service import ImportService
-from domain.amount_normalizer import normalize_amount
-from domain.remark_normalizer import normalize_taobao_remark
 from utils.datetime_util import extract_month
-from models.dto import NormalizedRecord, RunResult
 
 
 class RunReportService:

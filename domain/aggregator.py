@@ -5,7 +5,7 @@ import pandas as pd
 from models.dto import NormalizedRecord
 
 
-SUMMARY_COLUMNS = ["月份", "店铺名", "平台", "大类", "明细分类", "金额", "记录数"]
+SUMMARY_COLUMNS = ["月份", "店铺名", "平台", "大类", "明细分类", "收入金额", "支出金额", "记录数"]
 
 
 def aggregate_records(records: list[NormalizedRecord]) -> pd.DataFrame:
@@ -19,7 +19,8 @@ def aggregate_records(records: list[NormalizedRecord]) -> pd.DataFrame:
             "platform": record.platform,
             "major_category": record.major_category,
             "detail_category": record.detail_category,
-            "amount": record.amount,
+            "income_amount": record.amount if record.amount > 0 else 0.0,
+            "expense_amount": abs(record.amount) if record.amount < 0 else 0.0,
         }
         for record in records
     ]
@@ -28,8 +29,9 @@ def aggregate_records(records: list[NormalizedRecord]) -> pd.DataFrame:
     grouped = (
         df.groupby(["month", "store_name", "platform", "major_category", "detail_category"], dropna=False)
         .agg(
-            金额=("amount", "sum"),
-            记录数=("amount", "size"),
+            收入金额=("income_amount", "sum"),
+            支出金额=("expense_amount", "sum"),
+            记录数=("income_amount", "size"),
         )
         .reset_index()
     )

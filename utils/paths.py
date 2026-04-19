@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 
 APP_DIR_NAME = ".finance_tool"
