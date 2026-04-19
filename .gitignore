@@ -1,0 +1,14 @@
+.finance_tool/
+sample_input/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+env/
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
