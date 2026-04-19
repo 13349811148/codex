@@ -48,6 +48,7 @@ class NormalizedRecord:
     major_category: str
     ignored: bool
     error_message: str
+    warning_message: str
     source_file: str
     source_sheet: str
     source_type: str
@@ -61,3 +62,11 @@ class RunResult:
     summary_count: int
     export_path: str
     errors: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+
+@dataclass
+class RunProgress:
+    message: str
+    current: int
+    total: int

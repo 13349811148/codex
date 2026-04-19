@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from models.dto import FileMeta, RawRecord
 from parsers.base_parser import BaseParser
-from utils.excel_util import read_pdd_csv
+from utils.excel_util import read_pdd_table
 
 
 class PddCsvParser(BaseParser):
     def parse(self, file_path: str, file_meta: FileMeta) -> list[RawRecord]:
-        df = read_pdd_csv(file_path)
+        df = read_pdd_table(file_path)
+        source_type = f"pdd_{Path(file_path).suffix.lower().lstrip('.')}"
+        source_sheet = "default" if Path(file_path).suffix.lower() == ".csv" else "原始数据"
         records: list[RawRecord] = []
         for _, row in df.iterrows():
             if _is_empty_row(row.to_dict()):
@@ -22,8 +26,8 @@ class PddCsvParser(BaseParser):
                     biz_desc=str(row.get("业务描述", "")).strip(),
                     account_type=str(row.get("账务类型", "")).strip(),
                     source_file=file_meta.file_name,
-                    source_sheet="default",
-                    source_type="pdd_csv",
+                    source_sheet=source_sheet,
+                    source_type=source_type,
                     platform=file_meta.platform,
                     store_name=file_meta.store_name,
                 )

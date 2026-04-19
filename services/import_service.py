@@ -17,7 +17,10 @@ class ImportService:
         tasks: List[FileTask] = []
         for file_path in scan_supported_files(input_dir):
             file_meta = parse_filename(file_path.name)
-            source_type = detect_source(file_path)
+            try:
+                source_type = detect_source(file_path)
+            except ValueError:
+                continue
             tasks.append(FileTask(path=file_path, meta=file_meta, source_type=source_type))
         return tasks
 

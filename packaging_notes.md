@@ -1,0 +1,40 @@
+# 安装包说明
+
+## 目标
+生成一个可分发的 Windows 安装包，分发时只需要发送一个 `.exe` 文件。
+
+同事使用方式：
+1. 双击安装包
+2. 选择安装位置
+3. 点击安装
+4. 安装完成后可直接启动软件
+
+## 打包方案
+- `PyInstaller`：生成桌面程序
+- `Inno Setup`：生成单文件安装包
+
+## 构建命令
+
+```powershell
+.\build_installer.ps1
+```
+
+## 输出文件
+
+```text
+installer_output\finance-tool-v1.2-setup.exe
+```
+
+## 运行时数据目录
+软件安装后，配置和数据库写入：
+
+```text
+%LOCALAPPDATA%\FinanceTool
+```
+
+这样不会因为安装在 `Program Files` 而缺少写权限。
+
+## 升级行为
+- 安装器沿用同一个 `AppId`
+- 版本号已升级到 `1.2.0`
+- 用户安装 V1.2 时，会自动识别并替换旧版本

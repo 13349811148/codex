@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from models.dto import FileMeta, RawRecord
 from parsers.base_parser import BaseParser
-from utils.excel_util import read_tb_excel
+from utils.excel_util import read_tb_table
 
 
 class TbXlsxParser(BaseParser):
     def parse(self, file_path: str, file_meta: FileMeta) -> list[RawRecord]:
-        df = read_tb_excel(file_path)
+        df = read_tb_table(file_path)
+        source_type = f"tb_{Path(file_path).suffix.lower().lstrip('.')}"
+        source_sheet = "default" if Path(file_path).suffix.lower() == ".csv" else "原始数据"
         records: list[RawRecord] = []
         for _, row in df.iterrows():
             if _is_empty_row(row.to_dict()):
@@ -22,8 +26,8 @@ class TbXlsxParser(BaseParser):
                     biz_desc=str(row.get("业务描述", "")).strip(),
                     account_type=str(row.get("账务类型", "")).strip(),
                     source_file=file_meta.file_name,
-                    source_sheet="原始数据",
-                    source_type="tb_xlsx",
+                    source_sheet=source_sheet,
+                    source_type=source_type,
                     platform=file_meta.platform,
                     store_name=file_meta.store_name,
                 )

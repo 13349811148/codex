@@ -1,6 +1,10 @@
 .finance_tool/
 sample_input/
 test_output/
+build/
+dist/
+installer_output/
+*.spec
 __pycache__/
 *.pyc
 *.pyo

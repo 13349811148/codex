@@ -5,7 +5,7 @@ import re
 from models.dto import FileMeta
 
 
-PLATFORMS = ("拼多多", "淘宝", "天猫", "京东")
+PLATFORMS = ("拼多多", "淘工厂", "淘农场", "淘宝", "天猫", "京东")
 
 
 def parse_filename(file_name: str) -> FileMeta:

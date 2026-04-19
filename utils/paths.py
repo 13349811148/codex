@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 from pathlib import Path
 
 
-APP_DIR_NAME = ".finance_tool"
+APP_DIR_NAME = "FinanceTool"
 
 
 def get_app_home() -> Path:
-    path = Path.cwd() / APP_DIR_NAME
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    base_dir = Path(local_appdata) if local_appdata else Path.home() / "AppData" / "Local"
+    path = base_dir / APP_DIR_NAME
     path.mkdir(parents=True, exist_ok=True)
     return path
 
