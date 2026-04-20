@@ -11,6 +11,7 @@
 - 贷借法双金额列输出
 - 未映射提醒与暂未分类归并
 - 后台处理与进度显示
+- WPS 在线映射同步
 - 单文件安装包升级发布
 
 ## Architecture
@@ -22,10 +23,14 @@
    - 处理状态、进度文本、进度条
    - 处理结果和异常展示
    - 异常复制
+   - 在线映射状态卡片
+   - `手动同步映射` 按钮
 
 2. `Application Services`
    - 导入、分类、汇总、导出流程编排
    - 运行进度回调
+   - 映射运行时缓存加载
+   - WPS 在线映射同步
 
 3. `Domain`
    - 文件名解析
@@ -39,6 +44,7 @@
    - 文件系统访问
    - CSV/XLS/XLSX 读取
    - SQLite
+   - WPS OAuth 与 OpenAPI
    - Excel 导出
    - PyInstaller / Inno Setup 打包
 
@@ -64,6 +70,21 @@
 - 报表生成在后台线程执行
 - UI 主线程只负责交互与进度刷新
 - 即使数据量较大，窗口也保持可响应
+
+在线映射同步流程：
+
+```text
+点击手动同步映射
+-> 检查 WPS 授权配置
+-> 优先读取本地 wps_file_id
+-> 若未配置则尝试由分享短链解析 file_id
+-> 获取工作表列表
+-> 读取正式映射工作表有效区域
+-> 解析映射规则
+-> 替换 SQLite 本地映射缓存
+-> 刷新映射版本、状态和来源
+-> UI 弹窗提示同步完成
+```
 
 ## Parsing
 
@@ -163,6 +184,70 @@
 - 归类为 `暂未分类 / 暂未分类`
 - 生成提醒文案
 
+## Mapping Source Management
+
+### Runtime Sources
+系统当前支持两级映射来源：
+
+1. 内置默认映射
+   - 首次启动时写入 SQLite
+   - 作为离线保底规则
+
+2. WPS 在线映射
+   - 用户手动触发同步
+   - 同步成功后覆盖本地 `mapping_rules`
+   - 后续报表运行优先使用在线同步后的缓存
+
+### Persisted Metadata
+SQLite 除保存规则外，还保存同步元数据：
+
+- `mapping_version`
+- `mapping_last_sync_status`
+- `mapping_last_sync_message`
+- `mapping_source_url`
+
+UI 与 CLI 会同时展示这些字段，便于确认当前正在使用哪一版映射。
+
+## WPS Online Mapping
+
+### Current Route
+当前在线映射采用：
+
+- 控制台：`open.wps.cn`
+- 授权与接口：`openapi.wps.cn`
+
+使用现有企业自建应用进行用户授权，所需权限为：
+
+- `kso.sheets.read`
+- `kso.file_link.readwrite`（仅在需要由短链解析 `file_id` 时使用）
+
+### File Identification Strategy
+由于 `kdocs.cn` 私有短链在 `open.wps.cn` 链路下不一定能稳定返回文件元信息，当前实现采用双路径：
+
+1. 优先使用本地配置的 `wps_file_id`
+2. 若未配置，再尝试通过分享短链解析 `file_id`
+
+为此新增 CLI 兜底命令：
+
+```bash
+python tools/mapping_sync_cli.py set-file-id <file_id>
+```
+
+### Worksheet Read Strategy
+WPS 工作表列表接口会返回 `active_area`。当前实现不再按整张表的最大行列读取，而是：
+
+- 使用 `active_area.row_from ~ row_to`
+- 使用 `active_area.col_from ~ col_to`
+
+这样可以避免对超大空白区域发起 `range_data` 调用，减少 `CoreExecutionFailed` 风险。
+
+### Validated Online File
+当前已用真实在线表格完成验证：
+
+- `file_id = 513431252713`
+- 工作表：`正式映射`
+- 实际同步规则数：`124`
+
 ## Aggregation
 当前导出使用分类汇总长表，每行对应：
 
@@ -209,12 +294,17 @@
 - 提供 `复制选中` 和 `复制全部`
 - 处理期间禁用目录选择和启动按钮，避免重复触发
 - 未映射提醒同时显示在列表和弹窗中
+- 在线映射区域显示当前 `映射版本 / 同步状态 / 映射来源`
+- 提供 `手动同步映射` 按钮
 
 ## Persistence
 SQLite 保存：
 - 默认输入目录
 - 最近导出目录
 - 运行日志
+- 在线映射规则缓存
+- 在线映射同步元数据
+- `wps_file_id`、`wps_sheet_id`、`wps_sheet_name`
 
 ## Packaging
 - `PyInstaller` 生成无控制台桌面程序
@@ -232,3 +322,5 @@ SQLite 保存：
 - 淘宝系和拼多多均支持 `CSV/XLS/XLSX`
 - 未映射项进入 `暂未分类` 并弹窗提醒
 - 大数据量处理时界面保持可响应并显示进度
+- 能通过真实 WPS 在线表格同步 `正式映射`
+- `kdocs` 私有短链无法解析时，可通过手动 `file_id` 成功同步

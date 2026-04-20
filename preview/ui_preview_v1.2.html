@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>财务统计小工具 V1.2 - UI 预览</title>
+  <style>
+    :root {
+      --bg: #efe7d8;
+      --bg-strong: #e5d7bf;
+      --paper: #fffaf2;
+      --paper-soft: #f7f0e3;
+      --line: #dccbb2;
+      --text: #2c2a23;
+      --muted: #736a5f;
+      --accent: #1e4f3e;
+      --accent-soft: #dceddf;
+      --accent-strong: #14382b;
+      --gold: #a76b1d;
+      --gold-soft: #f4e2bf;
+      --danger: #8f4134;
+      --danger-soft: #f7ddd7;
+      --warn: #8f6b22;
+      --warn-soft: #f8e9bf;
+      --shadow-lg: 0 28px 50px rgba(76, 58, 31, 0.16);
+      --shadow-md: 0 14px 30px rgba(76, 58, 31, 0.10);
+      --radius-xl: 28px;
+      --radius-lg: 22px;
+      --radius-md: 16px;
+      --radius-sm: 12px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Microsoft YaHei UI", "PingFang SC", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(255, 255, 255, 0.72), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(167, 107, 29, 0.10), transparent 24%),
+        linear-gradient(135deg, #f2eadc 0%, #eadfce 46%, #efe7d8 100%);
+      padding: 36px;
+    }
+
+    .shell {
+      max-width: 1460px;
+      margin: 0 auto;
+      border-radius: 36px;
+      overflow: hidden;
+      background: rgba(255, 250, 242, 0.72);
+      backdrop-filter: blur(18px);
+      box-shadow: var(--shadow-lg);
+      border: 1px solid rgba(220, 203, 178, 0.95);
+    }
+
+    .shell-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 20px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.70), rgba(247, 240, 227, 0.72));
+      border-bottom: 1px solid rgba(220, 203, 178, 0.9);
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: #d1b48b;
+    }
+
+    .dot:nth-child(2) {
+      background: #d6c16c;
+    }
+
+    .dot:nth-child(3) {
+      background: #88b383;
+    }
+
+    .shell-title {
+      margin-left: 10px;
+      font-size: 13px;
+      color: var(--muted);
+      letter-spacing: 0.2px;
+    }
+
+    .app {
+      padding: 28px;
+      display: grid;
+      gap: 22px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 22px;
+      padding: 28px;
+      border-radius: var(--radius-xl);
+      background:
+        radial-gradient(circle at top right, rgba(255, 255, 255, 0.45), transparent 22%),
+        linear-gradient(135deg, #234e3f 0%, #183b30 44%, #b78239 150%);
+      color: #fff9ee;
+      box-shadow: var(--shadow-md);
+    }
+
+    .hero h1 {
+      margin: 0 0 12px;
+      font-size: 34px;
+      line-height: 1.15;
+      letter-spacing: 0.4px;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 780px;
+      color: rgba(255, 249, 238, 0.82);
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .hero-side {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 18px;
+    }
+
+    .version-pill {
+      padding: 10px 18px;
+      border-radius: 999px;
+      background: rgba(255, 250, 242, 0.14);
+      border: 1px solid rgba(255, 250, 242, 0.22);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+    }
+
+    .hero-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(110px, 1fr));
+      gap: 12px;
+      width: 100%;
+    }
+
+    .hero-metric {
+      padding: 16px 18px;
+      border-radius: 18px;
+      background: rgba(255, 250, 242, 0.12);
+      border: 1px solid rgba(255, 250, 242, 0.18);
+      text-align: right;
+    }
+
+    .hero-metric b {
+      display: block;
+      font-size: 22px;
+      margin-bottom: 6px;
+      color: #fffdf8;
+    }
+
+    .hero-metric span {
+      font-size: 12px;
+      color: rgba(255, 249, 238, 0.70);
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .chip {
+      padding: 9px 14px;
+      border-radius: 999px;
+      background: rgba(255, 250, 242, 0.12);
+      border: 1px solid rgba(255, 250, 242, 0.16);
+      font-size: 12px;
+      color: #fff9ee;
+    }
+
+    .content {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 22px;
+      align-items: start;
+    }
+
+    .stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .card {
+      background: rgba(255, 250, 242, 0.95);
+      border: 1px solid rgba(220, 203, 178, 0.92);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+    }
+
+    .card-head {
+      padding: 20px 22px 14px;
+    }
+
+    .card-title {
+      margin: 0 0 6px;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .card-subtitle {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    .card-body {
+      padding: 0 22px 22px;
+    }
+
+    .field-label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 10px;
+      letter-spacing: 0.3px;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 92px;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .input {
+      height: 48px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      color: #8a7d6d;
+      font-size: 14px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    }
+
+    .button {
+      height: 48px;
+      border-radius: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+      user-select: none;
+    }
+
+    .button-outline {
+      border: 1px solid var(--line);
+      background: var(--paper);
+      color: var(--text);
+    }
+
+    .button-primary {
+      width: 100%;
+      height: 54px;
+      background: linear-gradient(180deg, #245543 0%, #163c2f 100%);
+      color: #fff8f0;
+      border: 0;
+      box-shadow: 0 18px 28px rgba(30, 79, 62, 0.18);
+      margin-top: 8px;
+    }
+
+    .caption {
+      margin-top: 12px;
+      padding: 13px 14px;
+      border-radius: 14px;
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .support-list,
+    .rule-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .row-tag {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: var(--paper-soft);
+      border: 1px solid #e9ddca;
+      font-size: 13px;
+      color: #544c43;
+    }
+
+    .panel-top {
+      padding: 22px 22px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .status-pill {
+      padding: 10px 16px;
+      border-radius: 999px;
+      background: var(--gold-soft);
+      color: var(--gold);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      border: 1px solid #ecd19b;
+      white-space: nowrap;
+    }
+
+    .summary {
+      padding: 10px 22px 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    .progress-wrap {
+      padding: 18px 22px 8px;
+    }
+
+    .progress-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+
+    .progress-text {
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .progress-meta {
+      color: var(--muted);
+    }
+
+    .progress-bar {
+      height: 14px;
+      border-radius: 999px;
+      background: #ece0cd;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-bar::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      width: 68%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #b67d32 0%, #204f3f 100%);
+      box-shadow: 0 0 18px rgba(30, 79, 62, 0.22);
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      padding: 16px 22px 20px;
+    }
+
+    .stat-card {
+      padding: 16px 16px 14px;
+      border-radius: 18px;
+      background: linear-gradient(180deg, #fffdf8 0%, #f8f0e3 100%);
+      border: 1px solid #eadcca;
+    }
+
+    .stat-card b {
+      display: block;
+      font-size: 24px;
+      margin-bottom: 8px;
+      color: #1f342c;
+    }
+
+    .stat-card span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .path-box {
+      margin: 0 22px 22px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: #f8f1e4;
+      border: 1px solid #eadcca;
+      color: #655d54;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .path-box b {
+      display: block;
+      margin-bottom: 6px;
+      color: #2f2c26;
+      font-size: 12px;
+      letter-spacing: 0.2px;
+    }
+
+    .issues-head {
+      padding: 22px 22px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+    }
+
+    .mini-button {
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .issue-list {
+      padding: 0 22px 22px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .issue {
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid;
+      line-height: 1.7;
+      font-size: 13px;
+    }
+
+    .issue-error {
+      background: var(--danger-soft);
+      border-color: #e7bbb1;
+      color: var(--danger);
+    }
+
+    .issue-warning {
+      background: var(--warn-soft);
+      border-color: #ebd69a;
+      color: #77571b;
+    }
+
+    .footer-note {
+      padding: 0 22px 22px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    @media (max-width: 1220px) {
+      body {
+        padding: 18px;
+      }
+
+      .hero,
+      .content {
+        grid-template-columns: 1fr;
+      }
+
+      .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="shell-bar">
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <div class="shell-title">财务统计小工具 V1.2 · UI 预览稿</div>
+    </div>
+
+    <div class="app">
+      <section class="hero">
+        <div>
+          <h1>财务统计小工具</h1>
+          <p>
+            面向公司内部财务的一站式账单工作台。统一读取多平台账单，自动完成平台识别、分类映射、汇总统计和 Excel 导出，
+            并把异常与未映射提醒集中收口到同一个结果面板里。
+          </p>
+          <div class="chips">
+            <span class="chip">拼多多 / 淘宝 / 天猫 / 淘工厂 / 淘农场</span>
+            <span class="chip">CSV / XLS / XLSX 自动识别</span>
+            <span class="chip">贷借法双金额列</span>
+            <span class="chip">后台处理 + 进度显示</span>
+          </div>
+        </div>
+
+        <div class="hero-side">
+          <div class="version-pill">VERSION 1.2</div>
+          <div class="hero-metrics">
+            <div class="hero-metric">
+              <b>5</b>
+              <span>已支持平台</span>
+            </div>
+            <div class="hero-metric">
+              <b>3</b>
+              <span>支持文件格式</span>
+            </div>
+            <div class="hero-metric">
+              <b>1</b>
+              <span>单表导出</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="content">
+        <div class="stack">
+          <article class="card">
+            <div class="card-head">
+              <h2 class="card-title">任务配置</h2>
+              <p class="card-subtitle">保留“一键生成报表”的简洁流程，但把输入区做成更清晰的工作台入口。</p>
+            </div>
+            <div class="card-body">
+              <label class="field-label">账单目录</label>
+              <div class="field-row">
+                <div class="input">C:\Users\Administrator\Desktop\账单样本目录</div>
+                <div class="button button-outline">浏览</div>
+              </div>
+              <div class="button button-primary">一键生成报表</div>
+              <div class="caption">
+                运行期间窗口保持响应，支持处理大批量账单。生成前仍弹出保存对话框，让用户每次自己选择导出位置。
+              </div>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h2 class="card-title">导出规则</h2>
+              <p class="card-subtitle">把财务最关心的结果口径直接放在左侧说明区。</p>
+            </div>
+            <div class="card-body">
+              <div class="rule-list">
+                <div class="row-tag">总汇总表导出，保留大类与明细分类</div>
+                <div class="row-tag">收入金额 / 支出金额分列展示</div>
+                <div class="row-tag">未映射业务自动归类为“暂未分类”</div>
+                <div class="row-tag">导出完成后弹窗提示未维护规则</div>
+              </div>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="card-head">
+              <h2 class="card-title">平台支持</h2>
+              <p class="card-subtitle">这里用标签式信息呈现软件边界，降低使用时的不确定性。</p>
+            </div>
+            <div class="card-body">
+              <div class="support-list">
+                <div class="row-tag">拼多多：CSV / XLS / XLSX</div>
+                <div class="row-tag">淘宝：CSV / XLS / XLSX</div>
+                <div class="row-tag">天猫 / 淘工厂 / 淘农场：复用淘宝系规则</div>
+                <div class="row-tag">目录混有旧导出文件时自动跳过</div>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="stack">
+          <article class="card">
+            <div class="panel-top">
+              <div>
+                <h2 class="card-title" style="margin:0 0 6px;">运行看板</h2>
+                <p class="card-subtitle" style="margin:0;">把状态、进度和结果摘要集中在一个主卡片里，避免信息散落。</p>
+              </div>
+              <div class="status-pill">处理中</div>
+            </div>
+
+            <div class="summary">
+              当前任务：扫描账单目录、识别平台模板、执行分类映射、汇总统计并导出 Excel。
+            </div>
+
+            <div class="progress-wrap">
+              <div class="progress-head">
+                <div class="progress-text">正在处理第 2 / 5 个文件：3月淘宝-庄芯粮油1号店.xlsx</div>
+                <div class="progress-meta">68%</div>
+              </div>
+              <div class="progress-bar"></div>
+            </div>
+
+            <div class="stats-grid">
+              <div class="stat-card">
+                <b>5</b>
+                <span>扫描文件数</span>
+              </div>
+              <div class="stat-card">
+                <b>2,486</b>
+                <span>汇总行数</span>
+              </div>
+              <div class="stat-card">
+                <b>6</b>
+                <span>异常数</span>
+              </div>
+              <div class="stat-card">
+                <b>10</b>
+                <span>提醒数</span>
+              </div>
+            </div>
+
+            <div class="path-box">
+              <b>导出路径</b>
+              C:\Users\Administrator\Desktop\财务汇总报表_20260419_203000.xlsx
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="issues-head">
+              <div>
+                <h2 class="card-title" style="margin:0 0 6px;">异常与提醒</h2>
+                <p class="card-subtitle" style="margin:0;">继续保留复制能力，但把列表区做得更像真正的结果面板。</p>
+              </div>
+              <div class="actions">
+                <div class="mini-button">复制选中</div>
+                <div class="mini-button">复制全部</div>
+              </div>
+            </div>
+
+            <div class="issue-list">
+              <div class="issue issue-error">3月拼多多—黄小惠米面旗舰店.csv：收入和支出同时为空或为0</div>
+              <div class="issue issue-error">3月淘宝-庄品健大米1号店（下载）.xlsx：收入和支出同时为空或为0</div>
+              <div class="issue issue-warning">[提醒] 店铺庄芯粮油1号店账单表格中的业务描述项：百亿补贴软件服务费扣款 —— 0030088|软件服务费-百亿补贴软件服务费（渠道） 未做分类映射，请及时联系软件开发方维护更新。</div>
+              <div class="issue issue-warning">[提醒] 店铺庄芯粮油1号店账单表格中的业务描述项：商家权益红包-预算追加-淘宝物流轨迹异常红包-赔付红包 —— [空] 未做分类映射，请及时联系软件开发方维护更新。</div>
+            </div>
+
+            <div class="footer-note">
+              交互建议：支持 Ctrl / Shift 多选，错误和提醒统一列表展示，但用颜色区分优先级。
+            </div>
+          </article>
+        </div>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

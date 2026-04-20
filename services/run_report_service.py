@@ -16,11 +16,16 @@ from utils.datetime_util import extract_month
 
 
 class RunReportService:
-    def __init__(self, config_repo: ConfigRepository, run_log_repo: RunLogRepository) -> None:
+    def __init__(
+        self,
+        config_repo: ConfigRepository,
+        run_log_repo: RunLogRepository,
+        classify_service: ClassifyService,
+    ) -> None:
         self.config_repo = config_repo
         self.run_log_repo = run_log_repo
         self.import_service = ImportService()
-        self.classify_service = ClassifyService()
+        self.classify_service = classify_service
         self.aggregate_service = AggregateService()
         self.export_service = ExportService()
 
@@ -36,6 +41,7 @@ class RunReportService:
         normalized_records: List[NormalizedRecord] = []
         success_count = 0
         failed_count = 0
+        self.classify_service.reload_rules()
 
         self._emit_progress(progress_callback, "正在扫描数据目录...", 0, 0)
         tasks = self.import_service.scan(input_dir)

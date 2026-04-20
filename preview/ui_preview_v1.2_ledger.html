@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>财务统计小工具 V1.2 - 方案 C 台账风</title>
+  <style>
+    :root {
+      --bg: #f3f1ed;
+      --paper: #fffdfa;
+      --paper-2: #f8f5ef;
+      --line: #ddd6cb;
+      --text: #272621;
+      --muted: #736f67;
+      --green: #23453c;
+      --green-soft: #dde8e4;
+      --amber: #9f7833;
+      --amber-soft: #efe2c6;
+      --red: #8b463e;
+      --red-soft: #f3deda;
+      --radius-lg: 18px;
+      --radius-md: 12px;
+      --shadow: 0 18px 40px rgba(75, 63, 39, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 24px;
+      font-family: "Microsoft YaHei UI", "PingFang SC", sans-serif;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.72), transparent),
+        linear-gradient(135deg, #f6f2eb 0%, #ede7de 100%);
+      color: var(--text);
+    }
+
+    .window {
+      max-width: 1480px;
+      margin: 0 auto;
+      background: rgba(255,253,250,0.86);
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .masthead {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 100px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .masthead-left {
+      padding: 24px 26px;
+      background: linear-gradient(180deg, #23453c 0%, #1a332d 100%);
+      color: #fbfaf6;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .masthead-left b {
+      font-size: 24px;
+      line-height: 1.2;
+      margin-bottom: 8px;
+      letter-spacing: 0.3px;
+    }
+
+    .masthead-left span {
+      color: rgba(255, 250, 246, 0.72);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .masthead-right {
+      padding: 18px 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 14px;
+      background: rgba(255,255,255,0.32);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .toolbar-left, .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .pill.active {
+      background: var(--green-soft);
+      border-color: #c8dcd5;
+      color: var(--green);
+      font-weight: 700;
+    }
+
+    .path {
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      color: #8b8477;
+      font-size: 13px;
+      flex: 1;
+      min-width: 420px;
+    }
+
+    .button {
+      padding: 12px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    .button.primary {
+      border-color: transparent;
+      background: var(--green);
+      color: #fffdfa;
+    }
+
+    .body {
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      min-height: 760px;
+    }
+
+    .sidebar {
+      padding: 22px 18px;
+      border-right: 1px solid var(--line);
+      background: rgba(248, 245, 239, 0.88);
+    }
+
+    .nav-title {
+      margin: 0 0 12px;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+
+    .nav {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 22px;
+    }
+
+    .nav-item {
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      color: #5a544b;
+      border: 1px solid transparent;
+    }
+
+    .nav-item.active {
+      background: var(--paper);
+      border-color: var(--line);
+      color: var(--green);
+      font-weight: 700;
+    }
+
+    .side-card {
+      padding: 14px;
+      border-radius: 14px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+      line-height: 1.7;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .main {
+      padding: 22px;
+      display: grid;
+      gap: 18px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.25), rgba(255,255,255,0.05));
+    }
+
+    .grid-top {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+    }
+
+    .metric {
+      padding: 18px;
+      border-radius: 16px;
+      background: var(--paper);
+      border: 1px solid var(--line);
+    }
+
+    .metric b {
+      display: block;
+      font-size: 26px;
+      color: var(--green);
+      margin-bottom: 8px;
+    }
+
+    .metric span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .board {
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: var(--paper);
+      overflow: hidden;
+    }
+
+    .board-head {
+      padding: 18px 18px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .board-head h2 {
+      margin: 0 0 6px;
+      font-size: 18px;
+    }
+
+    .board-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .status {
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: var(--amber-soft);
+      color: var(--amber);
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid #e3cfac;
+      white-space: nowrap;
+    }
+
+    .progress {
+      padding: 0 18px 18px;
+    }
+
+    .progress-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+      margin-bottom: 10px;
+    }
+
+    .progress-row .left {
+      font-weight: 700;
+    }
+
+    .progress-row .right {
+      color: var(--muted);
+    }
+
+    .bar {
+      height: 12px;
+      border-radius: 999px;
+      background: #ece6dc;
+      overflow: hidden;
+    }
+
+    .bar::after {
+      content: "";
+      display: block;
+      width: 74%;
+      height: 100%;
+      background: linear-gradient(90deg, #b18d54 0%, #23453c 100%);
+      border-radius: inherit;
+    }
+
+    .table-wrap {
+      padding: 0 18px 18px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      overflow: hidden;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      font-size: 13px;
+    }
+
+    thead th {
+      background: var(--paper-2);
+      text-align: left;
+      padding: 13px 14px;
+      color: var(--muted);
+      font-weight: 700;
+      border-bottom: 1px solid var(--line);
+    }
+
+    tbody td {
+      padding: 14px;
+      border-bottom: 1px solid #eee6db;
+      vertical-align: top;
+      line-height: 1.7;
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .type {
+      display: inline-flex;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .type.error {
+      background: var(--red-soft);
+      color: var(--red);
+    }
+
+    .type.warn {
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    @media (max-width: 1200px) {
+      .masthead,
+      .body {
+        grid-template-columns: 1fr;
+      }
+
+      .grid-top {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .path {
+        min-width: 240px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="window">
+    <div class="masthead">
+      <div class="masthead-left">
+        <b>财务统计小工具</b>
+        <span>方案 C · 台账工作台风格</span>
+      </div>
+      <div class="masthead-right">
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <div class="pill active">V1.2</div>
+            <div class="pill">淘宝系 / 拼多多</div>
+            <div class="pill">CSV / XLS / XLSX</div>
+          </div>
+          <div class="toolbar-right">
+            <div class="button">浏览</div>
+            <div class="button primary">一键生成报表</div>
+          </div>
+        </div>
+        <div class="path">C:\Users\Administrator\Desktop\账单目录</div>
+      </div>
+    </div>
+
+    <div class="body">
+      <aside class="sidebar">
+        <p class="nav-title">功能分区</p>
+        <div class="nav">
+          <div class="nav-item active">报表任务</div>
+          <div class="nav-item">运行状态</div>
+          <div class="nav-item">导出结果</div>
+          <div class="nav-item">异常与提醒</div>
+        </div>
+
+        <p class="nav-title">规则摘要</p>
+        <div class="side-card">
+          仅导出总汇总表；未匹配业务自动归类为“暂未分类”；导出后统一弹窗提醒；异常信息支持复制。
+        </div>
+      </aside>
+
+      <main class="main">
+        <section class="grid-top">
+          <div class="metric"><b>5</b><span>扫描文件数</span></div>
+          <div class="metric"><b>4</b><span>成功文件数</span></div>
+          <div class="metric"><b>18</b><span>提醒数</span></div>
+          <div class="metric"><b>2,486</b><span>汇总行数</span></div>
+        </section>
+
+        <section class="board">
+          <div class="board-head">
+            <div>
+              <h2>运行进度</h2>
+              <p>处理大批量数据时保持响应，进度信息用台账式排布呈现，更偏正式办公软件。</p>
+            </div>
+            <div class="status">处理中</div>
+          </div>
+          <div class="progress">
+            <div class="progress-row">
+              <div class="left">正在处理第 3 / 5 个文件：3月淘宝-庄芯粮油1号店.xlsx</div>
+              <div class="right">74%</div>
+            </div>
+            <div class="bar"></div>
+          </div>
+        </section>
+
+        <section class="board">
+          <div class="board-head">
+            <div>
+              <h2>异常与提醒明细</h2>
+              <p>更像财务系统台账列表，方便后续真正落到桌面软件里的结果面板。</p>
+            </div>
+            <div class="toolbar-right">
+              <div class="button">复制选中</div>
+              <div class="button">复制全部</div>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 120px;">类型</th>
+                  <th>内容</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="type error">异常</span></td>
+                  <td>3月拼多多—黄小惠米面旗舰店.csv：收入和支出同时为空或为0</td>
+                </tr>
+                <tr>
+                  <td><span class="type error">异常</span></td>
+                  <td>3月淘宝-庄品健大米1号店（下载）.xlsx：收入和支出同时为空或为0</td>
+                </tr>
+                <tr>
+                  <td><span class="type warn">提醒</span></td>
+                  <td>店铺庄芯粮油1号店账单表格中的业务描述项：百亿补贴软件服务费扣款 —— 0030088|软件服务费-百亿补贴软件服务费（渠道） 未做分类映射，请及时联系软件开发方维护更新。</td>
+                </tr>
+                <tr>
+                  <td><span class="type warn">提醒</span></td>
+                  <td>店铺庄芯粮油1号店账单表格中的业务描述项：商家权益红包-预算追加-淘宝物流轨迹异常红包-赔付红包 —— [空] 未做分类映射，请及时联系软件开发方维护更新。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

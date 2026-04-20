@@ -190,3 +190,43 @@ The system SHALL allow users to copy exception and warning messages from the UI.
 - GIVEN the message list contains one or more items
 - WHEN the user clicks `复制全部`
 - THEN the system copies the full list to the clipboard
+
+### Requirement: WPS Online Mapping Sync
+The system SHALL support manually syncing classification rules from a WPS online worksheet into the local cache.
+
+#### Scenario: Manual sync from online worksheet
+- GIVEN the user has configured a reachable WPS online mapping file
+- WHEN the user clicks `手动同步映射`
+- THEN the system reads the `正式映射` worksheet
+- AND replaces the local mapping cache with the synced rules
+- AND updates the displayed sync version, status, and source
+
+#### Scenario: Use synced rules in later report runs
+- GIVEN a successful WPS online mapping sync has completed
+- WHEN the user generates a report afterwards
+- THEN the system uses the synced local cache
+- AND does not fall back to the built-in mapping rules unless the cache is reset
+
+### Requirement: Manual File Id Fallback
+The system SHALL support manually configuring the WPS `file_id` when a private `kdocs.cn` share link cannot be resolved by OpenAPI.
+
+#### Scenario: Short link cannot resolve file id
+- GIVEN a `kdocs.cn` private share link does not return file metadata through `openapi.wps.cn`
+- WHEN the user attempts online mapping sync
+- THEN the system shows an actionable error
+- AND the error tells the user to manually provide `wps_file_id`
+
+#### Scenario: Sync with manually configured file id
+- GIVEN the user has manually written a valid `wps_file_id`
+- WHEN online mapping sync runs
+- THEN the system reads the worksheet directly by `file_id`
+- AND the sync can succeed without share-link metadata resolution
+
+### Requirement: Effective Range Reading
+The system SHALL read only the worksheet's effective active area when pulling online mapping cells from WPS.
+
+#### Scenario: Avoid full-sheet fetch
+- GIVEN the worksheet metadata includes `active_area`
+- WHEN the system requests `range_data`
+- THEN it uses the active row and column bounds instead of the full sheet max bounds
+- AND avoids failures caused by requesting excessively large empty regions

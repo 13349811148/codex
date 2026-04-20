@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>财务统计小工具 - UI 方案总览</title>
+  <style>
+    :root {
+      --bg: #f5efe7;
+      --panel: #fffdfa;
+      --line: #e4d7c6;
+      --text: #292720;
+      --muted: #756d61;
+      --accent: #214638;
+      --accent-soft: #e0ede6;
+      --radius: 20px;
+      --shadow: 0 18px 40px rgba(83, 62, 30, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 28px;
+      font-family: "Microsoft YaHei UI", "PingFang SC", sans-serif;
+      background: linear-gradient(180deg, #f8f3eb 0%, #f2ebe1 100%);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 1400px;
+      margin: 0 auto;
+      display: grid;
+      gap: 18px;
+    }
+
+    .hero {
+      padding: 24px 26px;
+      border-radius: 26px;
+      background: linear-gradient(135deg, #214638 0%, #18352b 55%, #8d6b37 140%);
+      color: #fffaf2;
+      box-shadow: var(--shadow);
+    }
+
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: 30px;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 900px;
+      color: rgba(255,250,242,0.78);
+      line-height: 1.8;
+      font-size: 14px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    .card {
+      padding: 22px;
+      border-radius: var(--radius);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      display: grid;
+      gap: 14px;
+    }
+
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .card h2 {
+      margin: 0 0 6px;
+      font-size: 20px;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.8;
+    }
+
+    .badge {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .list div {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #faf5eb;
+      border: 1px solid var(--line);
+      font-size: 13px;
+      color: #5d574d;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .button {
+      padding: 11px 16px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .button.primary {
+      background: var(--accent);
+      border-color: transparent;
+      color: #fffaf2;
+    }
+
+    @media (max-width: 1080px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>财务统计小工具 · UI 方案总览</h1>
+      <p>
+        下面是 4 套预览风格，全部只是 HTML 视觉稿，不会影响当前正式软件。你可以先挑方向，我再把选中的方案转成真正的 PySide6 界面。
+      </p>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <div class="card-top">
+          <div>
+            <h2>方案 A · 工作台卡片风</h2>
+            <p>有顶部概览和左右分栏，适合想要“更像产品”的桌面工具界面。</p>
+          </div>
+          <div class="badge">偏视觉化</div>
+        </div>
+        <div class="list">
+          <div>顶部信息量较强，氛围感明显</div>
+          <div>左侧操作区 + 右侧结果区</div>
+          <div>适合演示和长期扩展</div>
+        </div>
+        <div class="actions">
+          <a class="button primary" href="ui_preview_v1.2.html">打开方案 A</a>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-top">
+          <div>
+            <h2>方案 B · 极简办公风</h2>
+            <p>更克制、更轻，去掉大部分装饰元素，只保留核心布局。</p>
+          </div>
+          <div class="badge">偏极简</div>
+        </div>
+        <div class="list">
+          <div>信息结构最清楚</div>
+          <div>左边任务，右边结果</div>
+          <div>适合内部工具和财务同事使用</div>
+        </div>
+        <div class="actions">
+          <a class="button primary" href="ui_preview_v1.2_minimal.html">打开方案 B</a>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-top">
+          <div>
+            <h2>方案 C · 台账工作台风</h2>
+            <p>更像正式管理系统，侧边导航和表格式结果区更强，风格稳重。</p>
+          </div>
+          <div class="badge">偏系统化</div>
+        </div>
+        <div class="list">
+          <div>更像财务/ERP/台账软件</div>
+          <div>适合异常和提醒较多的场景</div>
+          <div>更容易延展规则管理页</div>
+        </div>
+        <div class="actions">
+          <a class="button primary" href="ui_preview_v1.2_ledger.html">打开方案 C</a>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-top">
+          <div>
+            <h2>方案 D · 紧凑专业风</h2>
+            <p>压缩布局，高密度信息，适合想让软件更像企业内部管理页面。</p>
+          </div>
+          <div class="badge">偏高密度</div>
+        </div>
+        <div class="list">
+          <div>视觉最干净利落</div>
+          <div>结果和状态高度集中</div>
+          <div>适合频繁处理账单的使用习惯</div>
+        </div>
+        <div class="actions">
+          <a class="button primary" href="ui_preview_v1.2_compact.html">打开方案 D</a>
+        </div>
+      </article>
+    </section>
+  </div>
+</body>
+</html>

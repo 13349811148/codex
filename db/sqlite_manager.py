@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Callable, TypeVar
+
+
+T = TypeVar("T")
 
 
 class SqliteManager:
@@ -34,3 +38,9 @@ class SqliteManager:
         with self._connect() as conn:
             cursor = conn.execute(sql, params)
             return cursor.fetchall()
+
+    def run_transaction(self, operation: Callable[[sqlite3.Connection], T]) -> T:
+        with self._connect() as conn:
+            result = operation(conn)
+            conn.commit()
+            return result

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from models.dto import NormalizedRecord
+from models.entities import MappingRule
 
 
 TAOBAO_LIKE_PLATFORMS = {"淘宝", "天猫", "淘工厂", "淘农场"}
+RULE_SEPARATOR = " —— "
 
 
 TAOBAO_RULES = {
@@ -56,7 +58,46 @@ PDD_RULES = {
 }
 
 
-def classify_record(record: NormalizedRecord) -> NormalizedRecord:
+def iter_builtin_mapping_rules() -> list[MappingRule]:
+    rules: list[MappingRule] = []
+
+    for platform in sorted(TAOBAO_LIKE_PLATFORMS):
+        for match_key, categories in TAOBAO_RULES.items():
+            remark_norm, biz_desc = match_key.split(RULE_SEPARATOR, 1)
+            detail_category, major_category = categories
+            rules.append(
+                MappingRule(
+                    platform=platform,
+                    match_key=match_key,
+                    remark_norm=remark_norm,
+                    biz_desc=biz_desc,
+                    detail_category=detail_category,
+                    major_category=major_category,
+                    source_version="builtin-default-v1",
+                )
+            )
+
+    for biz_desc, categories in PDD_RULES.items():
+        detail_category, major_category = categories
+        rules.append(
+            MappingRule(
+                platform="拼多多",
+                match_key=biz_desc,
+                remark_norm="[空]",
+                biz_desc=biz_desc,
+                detail_category=detail_category,
+                major_category=major_category,
+                source_version="builtin-default-v1",
+            )
+        )
+
+    return rules
+
+
+def classify_record(
+    record: NormalizedRecord,
+    rules_by_platform: dict[str, dict[str, tuple[str, str]]],
+) -> NormalizedRecord:
     if record.platform in TAOBAO_LIKE_PLATFORMS:
         if record.remark_norm == "[空]" and record.biz_desc == "[空]":
             record.ignored = True
@@ -64,8 +105,8 @@ def classify_record(record: NormalizedRecord) -> NormalizedRecord:
             record.major_category = "忽略"
             return record
 
-        key = f"{record.remark_norm} —— {record.biz_desc}"
-        matched = TAOBAO_RULES.get(key)
+        key = f"{record.remark_norm}{RULE_SEPARATOR}{record.biz_desc}"
+        matched = rules_by_platform.get(record.platform, {}).get(key)
         if not matched:
             record.detail_category = "暂未分类"
             record.major_category = "暂未分类"
@@ -76,7 +117,7 @@ def classify_record(record: NormalizedRecord) -> NormalizedRecord:
         return record
 
     if record.platform == "拼多多":
-        matched = PDD_RULES.get(record.biz_desc)
+        matched = rules_by_platform.get(record.platform, {}).get(record.biz_desc)
         if not matched:
             record.detail_category = "暂未分类"
             record.major_category = "暂未分类"
