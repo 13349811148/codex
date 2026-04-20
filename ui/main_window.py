@@ -24,9 +24,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from models.dto import MappingSaveResult, RunProgress, RunResult
+from models.dto import RunProgress, RunResult
 from models.entities import MappingRule
-from models.wps import WpsSyncResult, WpsUpdateCheckResult
+from models.wps import WpsPublishResult, WpsSyncResult, WpsUpdateCheckResult
 from repositories.config_repository import ConfigRepository
 from repositories.mapping_meta_repository import MappingMetaRepository
 from services.mapping_editor_service import MappingEditorService
@@ -101,6 +101,36 @@ class MappingCheckWorker(QObject):
             self.failed.emit(str(exc))
 
 
+class MappingPublishWorker(QObject):
+    progress_changed = Signal(str)
+    finished = Signal(object)
+    failed = Signal(str)
+
+    def __init__(
+        self,
+        wps_sync_service: WpsMappingSyncService,
+        rules: list[MappingRule],
+        interactive_auth: bool = True,
+    ) -> None:
+        super().__init__()
+        self.wps_sync_service = wps_sync_service
+        self.rules = rules
+        self.interactive_auth = interactive_auth
+
+    @Slot()
+    def run(self) -> None:
+        try:
+            self.progress_changed.emit("正在准备上传本地映射...")
+            result = self.wps_sync_service.publish_rules(
+                self.rules,
+                interactive_auth=self.interactive_auth,
+                progress_callback=self.progress_changed.emit,
+            )
+            self.finished.emit(result)
+        except Exception as exc:  # pragma: no cover - worker fallback
+            self.failed.emit(str(exc))
+
+
 class MainWindow(QMainWindow):
     MAPPING_HEADERS = ["平台", "标准化备注", "业务描述", "明细分类", "大类"]
 
@@ -125,6 +155,8 @@ class MainWindow(QMainWindow):
         self.sync_worker: MappingSyncWorker | None = None
         self.check_thread: QThread | None = None
         self.check_worker: MappingCheckWorker | None = None
+        self.publish_thread: QThread | None = None
+        self.publish_worker: MappingPublishWorker | None = None
 
         self.metric_labels: dict[str, QLabel] = {}
         self.nav_buttons: dict[str, QPushButton] = {}
@@ -394,7 +426,7 @@ class MainWindow(QMainWindow):
         text_layout = QVBoxLayout()
         title = QLabel("分类映射")
         title.setObjectName("BoardTitle")
-        desc = QLabel("在本地缓存中维护映射规则，并检查云端是否有新版本可同步。")
+        desc = QLabel("在本地缓存中维护映射规则，保存时自动上传云端，并检查云端是否有新版本可同步。")
         desc.setObjectName("BoardDesc")
         desc.setWordWrap(True)
         text_layout.addWidget(title)
@@ -406,7 +438,7 @@ class MainWindow(QMainWindow):
         self.mapping_sync_button = QPushButton("手动同步映射")
         self.mapping_sync_button.setObjectName("SecondaryButton")
         self.mapping_sync_button.clicked.connect(self._sync_mapping)
-        self.mapping_save_button = QPushButton("保存修改")
+        self.mapping_save_button = QPushButton("保存并上传云端")
         self.mapping_save_button.setObjectName("PrimaryButton")
         self.mapping_save_button.clicked.connect(self._save_mapping_rules)
         head.addWidget(self.mapping_check_button)
@@ -607,13 +639,14 @@ class MainWindow(QMainWindow):
             button.style().polish(button)
             button.update()
 
-    def _navigate_to_page(self, key: str) -> None:
+    def _navigate_to_page(self, key: str, *, run_mapping_check: bool = True) -> None:
         self._set_nav_active(key)
         if key in self.page_indexes:
             self.page_stack.setCurrentIndex(self.page_indexes[key])
         if key == "mapping":
             self._load_mapping_rules()
-            self._check_mapping_update(trigger="page", interactive_auth=False, allow_modal=False)
+            if run_mapping_check:
+                self._check_mapping_update(trigger="page", interactive_auth=False, allow_modal=False)
 
     def _set_status_badge(self, text: str, status: str) -> None:
         styles = {
@@ -731,7 +764,10 @@ class MainWindow(QMainWindow):
             self.mapping_table.setItem(row, column, item)
 
     def _is_busy(self) -> bool:
-        return any(worker is not None for worker in (self.report_thread, self.sync_thread, self.check_thread))
+        return any(
+            worker is not None
+            for worker in (self.report_thread, self.sync_thread, self.check_thread, self.publish_thread)
+        )
 
     def _choose_folder(self) -> None:
         current = self.folder_edit.text().strip()
@@ -813,7 +849,7 @@ class MainWindow(QMainWindow):
         self.progress_label.setText("进度：正在准备同步...")
         self.progress_percent_label.setText("同步中")
         self.progress_bar.setRange(0, 0)
-        self._navigate_to_page("mapping")
+        self._navigate_to_page("mapping", run_mapping_check=False)
 
         self.sync_thread = QThread(self)
         self.sync_worker = MappingSyncWorker(self.wps_sync_service, interactive_auth=True)
@@ -861,7 +897,7 @@ class MainWindow(QMainWindow):
 
         try:
             rules = self._collect_mapping_rules_from_table()
-            result = self.mapping_editor_service.save_rules(rules)
+            self.mapping_editor_service.save_rules(rules)
         except Exception as exc:
             QMessageBox.critical(self, "保存失败", str(exc))
             return
@@ -869,7 +905,7 @@ class MainWindow(QMainWindow):
         self.mapping_dirty = False
         self._refresh_mapping_info()
         self._load_mapping_rules()
-        self._show_mapping_save_result(result)
+        self._publish_mapping_rules()
 
     def _collect_mapping_rules_from_table(self) -> list[MappingRule]:
         rules: list[MappingRule] = []
@@ -887,8 +923,26 @@ class MainWindow(QMainWindow):
             )
         return rules
 
-    def _show_mapping_save_result(self, result: MappingSaveResult) -> None:
-        QMessageBox.information(self, "保存完成", f"{result.message}\n当前版本：{result.source_version}")
+    def _publish_mapping_rules(self) -> None:
+        rules = self.mapping_editor_service.list_rules()
+        self._set_running_state(True)
+        self._set_status_badge("上传中", "running")
+        self.status_label.setText("状态：正在上传分类映射")
+        self.progress_label.setText("进度：正在准备上传...")
+        self.progress_percent_label.setText("上传中")
+        self.progress_bar.setRange(0, 0)
+        self._navigate_to_page("mapping", run_mapping_check=False)
+
+        self.publish_thread = QThread(self)
+        self.publish_worker = MappingPublishWorker(self.wps_sync_service, rules, interactive_auth=True)
+        self.publish_worker.moveToThread(self.publish_thread)
+        self.publish_thread.started.connect(self.publish_worker.run)
+        self.publish_worker.progress_changed.connect(self._handle_publish_progress)
+        self.publish_worker.finished.connect(self._handle_publish_finished)
+        self.publish_worker.failed.connect(self._handle_publish_failed)
+        self.publish_worker.finished.connect(self._cleanup_publish_worker)
+        self.publish_worker.failed.connect(self._cleanup_publish_worker)
+        self.publish_thread.start()
 
     @Slot(object)
     def _handle_progress(self, progress: RunProgress) -> None:
@@ -989,6 +1043,42 @@ class MainWindow(QMainWindow):
         self._refresh_mapping_info()
         QMessageBox.critical(self, "错误", message)
 
+    @Slot(str)
+    def _handle_publish_progress(self, message: str) -> None:
+        self.progress_label.setText(f"进度：{message}")
+
+    @Slot(object)
+    def _handle_publish_finished(self, result: WpsPublishResult) -> None:
+        self._set_status_badge("已完成", "success")
+        self.status_label.setText("状态：分类映射已上传")
+        self.progress_label.setText("进度：上传完成")
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(100)
+        self.progress_percent_label.setText("100%")
+        self._set_running_state(False)
+        self._refresh_mapping_info()
+        self._load_mapping_rules()
+        QMessageBox.information(
+            self,
+            "上传完成",
+            "本地映射已保存并上传到 WPS。\n"
+            f"工作表：{result.worksheet_name}\n"
+            f"规则数：{result.rule_count}\n"
+            f"版本：{result.source_version}",
+        )
+
+    @Slot(str)
+    def _handle_publish_failed(self, message: str) -> None:
+        self._set_status_badge("失败", "failed")
+        self.status_label.setText("状态：云端上传失败")
+        self.progress_label.setText("进度：上传失败")
+        self.progress_percent_label.setText("0%")
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self._set_running_state(False)
+        self._refresh_mapping_info()
+        QMessageBox.warning(self, "上传失败", f"本地映射已经保存，但上传云端失败：\n{message}")
+
     @Slot(object)
     def _handle_mapping_check_finished(self, result: WpsUpdateCheckResult) -> None:
         self.mapping_check_button.setEnabled(True)
@@ -1059,6 +1149,18 @@ class MainWindow(QMainWindow):
             self.check_thread.deleteLater()
         self.check_worker = None
         self.check_thread = None
+
+    @Slot()
+    def _cleanup_publish_worker(self) -> None:
+        if self.publish_thread is not None:
+            self.publish_thread.quit()
+            self.publish_thread.wait()
+        if self.publish_worker is not None:
+            self.publish_worker.deleteLater()
+        if self.publish_thread is not None:
+            self.publish_thread.deleteLater()
+        self.publish_worker = None
+        self.publish_thread = None
 
     def _set_running_state(self, running: bool) -> None:
         enabled = not running

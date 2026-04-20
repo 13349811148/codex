@@ -242,14 +242,24 @@ The system SHALL provide a dedicated mapping workspace for maintaining local cla
 
 #### Scenario: Edit local mapping rules
 - GIVEN the user is on `分类映射` page
-- WHEN the user adds, edits, or deletes mapping rows and clicks `保存修改`
+- WHEN the user adds, edits, or deletes mapping rows and clicks `保存并上传云端`
 - THEN the system validates the rows
 - AND persists the rules to local `SQLite` cache
+- AND uploads the current mapping table to the configured WPS worksheet
+- AND writes a new cloud `mapping_version` and `updated_at`
 - AND refreshes runtime classification rules immediately
+
+#### Scenario: Preserve local save when cloud upload fails
+- GIVEN the user clicks `保存并上传云端`
+- AND local validation passes
+- WHEN the WPS upload step fails
+- THEN the system keeps the local `SQLite` mapping changes
+- AND records a sync status indicating local save succeeded but cloud upload failed
+- AND shows the user an actionable failure message
 
 #### Scenario: Reject duplicate mapping key
 - GIVEN the mapping table contains two rows with the same `platform + match_key`
-- WHEN the user clicks `保存修改`
+- WHEN the user clicks `保存并上传云端`
 - THEN the system rejects the save
 - AND shows which row is duplicated
 

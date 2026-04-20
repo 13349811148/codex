@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timezone
 from html import unescape
 import re
 from urllib.parse import urlparse
 
 from models.entities import MappingRule
-from models.wps import WpsSettings, WpsSyncResult, WpsUpdateCheckResult, WpsWorksheet
+from models.wps import WpsPublishResult, WpsSettings, WpsSyncResult, WpsUpdateCheckResult, WpsWorksheet
 from repositories.config_repository import ConfigRepository
 from repositories.mapping_meta_repository import MappingMetaRepository
 from repositories.mapping_repository import MappingRepository
@@ -25,6 +26,7 @@ class WpsMappingSyncService:
     TABLE_HEADERS = ("平台", "标准化备注", "业务描述", "明细分类", "大类")
     META_VERSION_KEYS = {"mapping_version", "云端版本", "映射版本"}
     META_UPDATED_AT_KEYS = {"updated_at", "更新时间"}
+    UPDATE_CHUNK_SIZE = 200
 
     def __init__(
         self,
@@ -156,6 +158,72 @@ class WpsMappingSyncService:
             self.mapping_meta_repository.set("mapping_last_sync_message", str(exc))
             raise
 
+    def publish_rules(
+        self,
+        rules: list[MappingRule],
+        *,
+        interactive_auth: bool = False,
+        source_version: str | None = None,
+        progress_callback: Callable[[str], None] | None = None,
+    ) -> WpsPublishResult:
+        settings = self.auth_service.load_settings()
+        self.mapping_repository.ensure_schema()
+        if not rules:
+            raise WpsSyncError("没有可上传的映射规则。")
+
+        publish_version = source_version or f"cloud-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+        updated_at = datetime.now(timezone.utc).isoformat()
+
+        try:
+            if progress_callback:
+                progress_callback("正在校验 WPS 授权与工作表...")
+            file_id = self._resolve_file_id(settings, interactive_auth)
+            worksheet = self._resolve_worksheet(file_id, settings.sheet_name or self.DEFAULT_SHEET_NAME, interactive_auth)
+
+            if progress_callback:
+                progress_callback("正在读取云端映射现有内容...")
+            current_matrix = self._fetch_matrix(file_id, worksheet, interactive_auth, allow_empty=True)
+            target_matrix = self._build_publish_matrix(rules, publish_version, updated_at)
+            operations = self._build_update_operations(current_matrix, target_matrix)
+
+            if operations:
+                if progress_callback:
+                    progress_callback(f"正在写回云端映射，共 {len(operations)} 个单元格变更...")
+                self._submit_update_operations(file_id, worksheet.sheet_id, operations, interactive_auth)
+            elif progress_callback:
+                progress_callback("云端映射内容无差异，正在刷新版本信息...")
+
+            self.mapping_repository.replace_all_rules(rules, publish_version)
+            self.mapping_meta_repository.set_many(
+                {
+                    "mapping_version": publish_version,
+                    "mapping_cloud_version": publish_version,
+                    "mapping_cloud_updated_at": updated_at,
+                    "mapping_last_sync_status": "success",
+                    "mapping_last_sync_message": f"已保存并上传 {len(rules)} 条映射规则到 WPS",
+                    "mapping_last_check_status": "up_to_date",
+                    "mapping_last_check_message": f"云端映射已更新到版本 {publish_version}",
+                    "mapping_last_checked_at": updated_at,
+                    "mapping_source_url": self._build_source_url(settings, file_id, worksheet.sheet_id),
+                }
+            )
+            self.config_repo.set("wps_file_id", file_id)
+            self.config_repo.set("wps_sheet_id", str(worksheet.sheet_id))
+            self.mapping_runtime_service.reload()
+            return WpsPublishResult(
+                file_id=file_id,
+                worksheet_id=worksheet.sheet_id,
+                worksheet_name=worksheet.name,
+                rule_count=len(rules),
+                source_version=publish_version,
+                updated_at=updated_at,
+                operation_count=len(operations),
+            )
+        except Exception as exc:
+            self.mapping_meta_repository.set("mapping_last_sync_status", "upload_failed")
+            self.mapping_meta_repository.set("mapping_last_sync_message", f"本地已保存，但上传云端失败：{exc}")
+            raise
+
     def _resolve_file_id(self, settings: WpsSettings, interactive_auth: bool) -> str:
         if settings.file_id:
             return settings.file_id
@@ -216,7 +284,14 @@ class WpsMappingSyncService:
             raise WpsSyncError(f"未找到工作表“{sheet_name}”。当前可用工作表：{available}")
         return target
 
-    def _fetch_matrix(self, file_id: str, worksheet: WpsWorksheet, interactive_auth: bool) -> list[list[str]]:
+    def _fetch_matrix(
+        self,
+        file_id: str,
+        worksheet: WpsWorksheet,
+        interactive_auth: bool,
+        *,
+        allow_empty: bool = False,
+    ) -> list[list[str]]:
         row_to = worksheet.active_row_to if worksheet.active_row_to >= worksheet.active_row_from else worksheet.max_row
         col_to = worksheet.active_col_to if worksheet.active_col_to >= worksheet.active_col_from else worksheet.max_col
         payload = self.openapi_client.request_json(
@@ -236,9 +311,79 @@ class WpsMappingSyncService:
             max(row_to, 0),
             max(col_to, 0),
         )
-        if not matrix:
+        if not matrix and not allow_empty:
             raise WpsSyncError(f"WPS 工作表“{worksheet.name}”未读取到任何单元格数据。")
         return matrix
+
+    def _build_publish_matrix(
+        self,
+        rules: list[MappingRule],
+        source_version: str,
+        updated_at: str,
+    ) -> list[list[str]]:
+        matrix: list[list[str]] = [
+            ["mapping_version", source_version],
+            ["updated_at", updated_at],
+            [],
+            list(self.TABLE_HEADERS),
+        ]
+        for rule in rules:
+            matrix.append(
+                [
+                    rule.platform,
+                    self._display_value(rule.remark_norm),
+                    self._display_value(rule.biz_desc),
+                    rule.detail_category,
+                    rule.major_category,
+                ]
+            )
+        return matrix
+
+    def _build_update_operations(
+        self,
+        current_matrix: list[list[str]],
+        target_matrix: list[list[str]],
+    ) -> list[dict[str, object]]:
+        row_count = max(len(current_matrix), len(target_matrix))
+        col_count = max(
+            max((len(row) for row in current_matrix), default=0),
+            max((len(row) for row in target_matrix), default=0),
+        )
+        operations: list[dict[str, object]] = []
+        for row_index in range(row_count):
+            for col_index in range(col_count):
+                current_value = self._matrix_value(current_matrix, row_index, col_index)
+                target_value = self._matrix_value(target_matrix, row_index, col_index)
+                if current_value == target_value:
+                    continue
+                operations.append(
+                    {
+                        "row_from": row_index,
+                        "row_to": row_index,
+                        "col_from": col_index,
+                        "col_to": col_index,
+                        "op_type": "cell_operation_type_formula",
+                        "formula": target_value,
+                    }
+                )
+        return operations
+
+    def _submit_update_operations(
+        self,
+        file_id: str,
+        worksheet_id: int,
+        operations: list[dict[str, object]],
+        interactive_auth: bool,
+    ) -> None:
+        for start in range(0, len(operations), self.UPDATE_CHUNK_SIZE):
+            batch = operations[start : start + self.UPDATE_CHUNK_SIZE]
+            self.openapi_client.request_json(
+                "POST",
+                f"/v7/sheets/{file_id}/worksheets/{worksheet_id}/range_data/batch_update",
+                json_body={"range_data": batch},
+                interactive_auth=interactive_auth,
+                required_scopes=["kso.sheets.readwrite"],
+            )
 
     def _extract_cloud_metadata(self, matrix: list[list[str]]) -> tuple[str, str]:
         metadata: dict[str, str] = {}
@@ -360,10 +505,22 @@ class WpsMappingSyncService:
         value = unescape(str(text or "")).strip()
         return value or self.EMPTY_TEXT
 
+    def _display_value(self, text: str) -> str:
+        value = unescape(str(text or "")).strip()
+        return "" if value == self.EMPTY_TEXT else value
+
+    def _matrix_value(self, matrix: list[list[str]], row_index: int, col_index: int) -> str:
+        if 0 <= row_index < len(matrix) and 0 <= col_index < len(matrix[row_index]):
+            return str(matrix[row_index][col_index] or "").strip()
+        return ""
+
     def _cell(self, row: list[str], index: int) -> str:
         if 0 <= index < len(row):
             return str(row[index] or "")
         return ""
+
+    def _build_source_url(self, settings: WpsSettings, file_id: str, worksheet_id: int) -> str:
+        return settings.share_url or f"wps://file/{file_id}/sheet/{worksheet_id}"
 
     def _extract_link_id(self, share_url: str) -> str:
         parsed = urlparse(share_url.strip())

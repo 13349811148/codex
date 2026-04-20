@@ -218,9 +218,9 @@ class WpsOAuthService:
         current = self.load_token()
         current_scope_set = set(current.scopes) if current else set()
 
-        if required_scope_set and not required_scope_set.issubset(current_scope_set):
+        if required_scope_set and not self._scopes_satisfied(current_scope_set, required_scope_set):
             if not interactive:
-                missing = ",".join(sorted(required_scope_set - current_scope_set))
+                missing = ",".join(sorted(required_scope_set - self._expand_scope_implications(current_scope_set)))
                 raise WpsAuthError(f"当前 WPS token 缺少所需 scope：{missing}，请先重新授权。")
             current = self.authorize_interactive(sorted(required_scope_set))
             return current.access_token
@@ -234,6 +234,15 @@ class WpsOAuthService:
             return self.authorize_interactive(requested_scopes).access_token
 
         raise WpsAuthError("当前没有可用的 WPS access_token，请先执行授权。")
+
+    def _scopes_satisfied(self, owned_scopes: set[str], required_scopes: set[str]) -> bool:
+        return required_scopes.issubset(self._expand_scope_implications(owned_scopes))
+
+    def _expand_scope_implications(self, scopes: set[str]) -> set[str]:
+        expanded = set(scopes)
+        if "kso.sheets.readwrite" in expanded:
+            expanded.add("kso.sheets.read")
+        return expanded
 
     def _token_request(self, form_data: dict[str, str]) -> dict:
         data = urlencode(form_data).encode("utf-8")

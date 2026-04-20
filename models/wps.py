@@ -55,6 +55,17 @@ class WpsSyncResult:
 
 
 @dataclass
+class WpsPublishResult:
+    file_id: str
+    worksheet_id: int
+    worksheet_name: str
+    rule_count: int
+    source_version: str
+    updated_at: str
+    operation_count: int
+
+
+@dataclass
 class WpsUpdateCheckResult:
     local_version: str
     cloud_version: str
