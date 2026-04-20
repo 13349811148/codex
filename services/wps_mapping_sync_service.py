@@ -363,7 +363,7 @@ class WpsMappingSyncService:
                         "col_from": col_index,
                         "col_to": col_index,
                         "op_type": "cell_operation_type_formula",
-                        "formula": target_value,
+                        "formula": self._write_formula_value(target_value),
                     }
                 )
         return operations
@@ -513,6 +513,10 @@ class WpsMappingSyncService:
         if 0 <= row_index < len(matrix) and 0 <= col_index < len(matrix[row_index]):
             return str(matrix[row_index][col_index] or "").strip()
         return ""
+
+    def _write_formula_value(self, value: str) -> str:
+        text = str(value or "")
+        return text if text else " "
 
     def _cell(self, row: list[str], index: int) -> str:
         if 0 <= index < len(row):
