@@ -230,3 +230,54 @@ The system SHALL read only the worksheet's effective active area when pulling on
 - WHEN the system requests `range_data`
 - THEN it uses the active row and column bounds instead of the full sheet max bounds
 - AND avoids failures caused by requesting excessively large empty regions
+
+### Requirement: Mapping Workspace
+The system SHALL provide a dedicated mapping workspace for maintaining local classification rules.
+
+#### Scenario: Open mapping workspace
+- GIVEN the user launches the desktop app
+- WHEN the main window is displayed
+- THEN the UI provides pages `账单统计`、`分类映射`、`异常消息`
+- AND the user can switch to `分类映射` without leaving the desktop app
+
+#### Scenario: Edit local mapping rules
+- GIVEN the user is on `分类映射` page
+- WHEN the user adds, edits, or deletes mapping rows and clicks `保存修改`
+- THEN the system validates the rows
+- AND persists the rules to local `SQLite` cache
+- AND refreshes runtime classification rules immediately
+
+#### Scenario: Reject duplicate mapping key
+- GIVEN the mapping table contains two rows with the same `platform + match_key`
+- WHEN the user clicks `保存修改`
+- THEN the system rejects the save
+- AND shows which row is duplicated
+
+### Requirement: Cloud Mapping Update Check
+The system SHALL check cloud mapping version changes without silently overwriting local rules.
+
+#### Scenario: Check update on startup
+- GIVEN the desktop app starts successfully
+- WHEN the background mapping check runs
+- THEN the system reads local `mapping_version`
+- AND reads cloud `mapping_version`
+- AND compares the two versions
+
+#### Scenario: Prompt before sync when update exists
+- GIVEN the cloud mapping version differs from the local version
+- WHEN startup or mapping-page check completes
+- THEN the system prompts the user whether to sync now
+- AND the system does not overwrite local rules until the user confirms
+
+#### Scenario: Show update state in mapping page
+- GIVEN the mapping page is open
+- WHEN the latest check result is available
+- THEN the page shows `本地版本`、`云端版本`、`检查状态`、`最近检查时间`
+- AND the page keeps a visible status hint such as `已是最新` or `检测到云端更新`
+
+#### Scenario: Cloud metadata missing version
+- GIVEN the cloud worksheet does not yet expose a readable `mapping_version`
+- WHEN the system runs an update check
+- THEN the system records a `missing_cloud_version`-style state
+- AND keeps local rules usable
+- AND does not auto-sync

@@ -6,6 +6,7 @@ from repositories.mapping_meta_repository import MappingMetaRepository
 from repositories.mapping_repository import MappingRepository
 from repositories.run_log_repository import RunLogRepository
 from services.classify_service import ClassifyService
+from services.mapping_editor_service import MappingEditorService
 from services.mapping_runtime_service import MappingRuntimeService
 from services.run_report_service import RunReportService
 from services.wps_auth_service import WpsOAuthService
@@ -22,6 +23,7 @@ class AppServices:
     mapping_repo: MappingRepository
     mapping_meta_repo: MappingMetaRepository
     mapping_runtime_service: MappingRuntimeService
+    mapping_editor_service: MappingEditorService
     classify_service: ClassifyService
     run_log_repo: RunLogRepository
     run_service: RunReportService
@@ -39,6 +41,7 @@ def build_app_services() -> AppServices:
     mapping_meta_repo = MappingMetaRepository(db)
     mapping_runtime_service = MappingRuntimeService(mapping_repo, mapping_meta_repo)
     mapping_runtime_service.ensure_seeded()
+    mapping_editor_service = MappingEditorService(mapping_repo, mapping_meta_repo, mapping_runtime_service)
     classify_service = ClassifyService(mapping_runtime_service)
     run_log_repo = RunLogRepository(db)
     run_service = RunReportService(
@@ -63,6 +66,7 @@ def build_app_services() -> AppServices:
         mapping_repo=mapping_repo,
         mapping_meta_repo=mapping_meta_repo,
         mapping_runtime_service=mapping_runtime_service,
+        mapping_editor_service=mapping_editor_service,
         classify_service=classify_service,
         run_log_repo=run_log_repo,
         run_service=run_service,
@@ -77,6 +81,7 @@ def bootstrap() -> MainWindow:
     return MainWindow(
         run_service=services.run_service,
         config_repo=services.config_repo,
+        mapping_editor_service=services.mapping_editor_service,
         mapping_meta_repo=services.mapping_meta_repo,
         wps_sync_service=services.wps_mapping_sync_service,
     )

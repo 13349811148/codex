@@ -70,3 +70,10 @@ class RunProgress:
     message: str
     current: int
     total: int
+
+
+@dataclass
+class MappingSaveResult:
+    rule_count: int
+    source_version: str
+    message: str

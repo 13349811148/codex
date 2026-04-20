@@ -6,7 +6,7 @@ import re
 from urllib.parse import urlparse
 
 from models.entities import MappingRule
-from models.wps import WpsSettings, WpsSyncResult, WpsWorksheet
+from models.wps import WpsSettings, WpsSyncResult, WpsUpdateCheckResult, WpsWorksheet
 from repositories.config_repository import ConfigRepository
 from repositories.mapping_meta_repository import MappingMetaRepository
 from repositories.mapping_repository import MappingRepository
@@ -23,6 +23,8 @@ class WpsMappingSyncService:
     EMPTY_TEXT = "[空]"
     DEFAULT_SHEET_NAME = "正式映射"
     TABLE_HEADERS = ("平台", "标准化备注", "业务描述", "明细分类", "大类")
+    META_VERSION_KEYS = {"mapping_version", "云端版本", "映射版本"}
+    META_UPDATED_AT_KEYS = {"updated_at", "更新时间"}
 
     def __init__(
         self,
@@ -54,6 +56,64 @@ class WpsMappingSyncService:
         matrix = self._fetch_matrix(file_id, worksheet, interactive_auth)
         return settings, worksheet, matrix
 
+    def check_update(self, interactive_auth: bool = False) -> WpsUpdateCheckResult:
+        checked_at = datetime.now(timezone.utc).isoformat()
+        local_version = self.mapping_meta_repository.get("mapping_version", "")
+        try:
+            settings, worksheet, matrix = self.preview_sheet(interactive_auth=interactive_auth)
+            cloud_version, updated_at = self._extract_cloud_metadata(matrix)
+            if not cloud_version:
+                result = WpsUpdateCheckResult(
+                    local_version=local_version,
+                    cloud_version="",
+                    has_update=False,
+                    checked_at=checked_at,
+                    status="missing_cloud_version",
+                    message="云端映射未配置 mapping_version 元数据，暂时无法判断是否有更新。",
+                )
+            else:
+                has_update = cloud_version != local_version
+                result = WpsUpdateCheckResult(
+                    local_version=local_version,
+                    cloud_version=cloud_version,
+                    has_update=has_update,
+                    checked_at=checked_at,
+                    status="update_available" if has_update else "up_to_date",
+                    message=(
+                        f"检测到云端映射新版本：{cloud_version}"
+                        if has_update
+                        else f"云端映射已是最新版本：{cloud_version}"
+                    ),
+                )
+
+            self.mapping_meta_repository.set_many(
+                {
+                    "mapping_cloud_version": result.cloud_version,
+                    "mapping_cloud_updated_at": updated_at,
+                    "mapping_last_check_status": result.status,
+                    "mapping_last_check_message": result.message,
+                    "mapping_last_checked_at": checked_at,
+                    "mapping_source_url": settings.share_url or f"wps://file/{self._resolve_file_id(settings, interactive_auth)}/sheet/{worksheet.sheet_id}",
+                }
+            )
+            return result
+        except Exception as exc:
+            self.mapping_meta_repository.set_many(
+                {
+                    "mapping_last_check_status": "failed",
+                    "mapping_last_check_message": str(exc),
+                    "mapping_last_checked_at": checked_at,
+                }
+            )
+            return WpsUpdateCheckResult(
+                local_version=local_version,
+                cloud_version="",
+                has_update=False,
+                checked_at=checked_at,
+                status="failed",
+                message=str(exc),
+            )
+
     def sync(self, interactive_auth: bool = False) -> WpsSyncResult:
         settings = self.auth_service.load_settings()
         self.mapping_repository.ensure_schema()
@@ -65,13 +125,19 @@ class WpsMappingSyncService:
             if not rules:
                 raise WpsSyncError("在线映射表未解析出任何有效规则，请检查“正式映射”工作表内容。")
 
-            source_version = f"wps-sync-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+            cloud_version, updated_at = self._extract_cloud_metadata(matrix)
+            source_version = cloud_version or f"wps-sync-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
             self.mapping_repository.replace_all_rules(rules, source_version)
             self.mapping_meta_repository.set_many(
                 {
                     "mapping_version": source_version,
+                    "mapping_cloud_version": cloud_version or source_version,
+                    "mapping_cloud_updated_at": updated_at,
                     "mapping_last_sync_status": "success",
                     "mapping_last_sync_message": f"已从 WPS 在线映射同步 {len(rules)} 条规则",
+                    "mapping_last_check_status": "up_to_date",
+                    "mapping_last_check_message": f"已同步到版本 {source_version}",
+                    "mapping_last_checked_at": datetime.now(timezone.utc).isoformat(),
                     "mapping_source_url": settings.share_url or f"wps://file/{file_id}/sheet/{worksheet.sheet_id}",
                 }
             )
@@ -174,6 +240,18 @@ class WpsMappingSyncService:
             raise WpsSyncError(f"WPS 工作表“{worksheet.name}”未读取到任何单元格数据。")
         return matrix
 
+    def _extract_cloud_metadata(self, matrix: list[list[str]]) -> tuple[str, str]:
+        metadata: dict[str, str] = {}
+        for row in matrix[:10]:
+            for index, cell in enumerate(row[:-1]):
+                key = self._normalize_meta_key(cell)
+                if not key:
+                    continue
+                value = str(row[index + 1] or "").strip()
+                if value:
+                    metadata.setdefault(key, value)
+        return metadata.get("mapping_version", ""), metadata.get("updated_at", "")
+
     def _cells_to_matrix(self, cells: list[dict], max_row: int, max_col: int) -> list[list[str]]:
         last_row = max((int(cell.get("row_to", -1) or -1) for cell in cells), default=-1)
         last_col = max((int(cell.get("col_to", -1) or -1) for cell in cells), default=-1)
@@ -269,6 +347,14 @@ class WpsMappingSyncService:
 
     def _normalize_header(self, text: str) -> str:
         return unescape(str(text or "")).strip()
+
+    def _normalize_meta_key(self, text: str) -> str:
+        value = unescape(str(text or "")).strip()
+        if value in self.META_VERSION_KEYS:
+            return "mapping_version"
+        if value in self.META_UPDATED_AT_KEYS:
+            return "updated_at"
+        return ""
 
     def _normalize_value(self, text: str) -> str:
         value = unescape(str(text or "")).strip()

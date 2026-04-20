@@ -52,3 +52,13 @@ class WpsSyncResult:
     worksheet_name: str
     rule_count: int
     source_version: str
+
+
+@dataclass
+class WpsUpdateCheckResult:
+    local_version: str
+    cloud_version: str
+    has_update: bool
+    checked_at: str
+    status: str
+    message: str = ""
