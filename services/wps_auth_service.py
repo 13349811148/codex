@@ -68,8 +68,8 @@ class _CallbackHandler(BaseHTTPRequestHandler):
 </head>
 <body>
   <div class="card">
-    <h1>授权结果已返回本机</h1>
-    <p>这个窗口可以直接关闭，回到财务统计工具继续下一步。</p>
+    <h1>授权结果已返回本地程序</h1>
+    <p>这个窗口可以直接关闭，回到财务统计小工具继续下一步。</p>
   </div>
 </body>
 </html>
@@ -143,7 +143,7 @@ class WpsOAuthService:
         self._validate_settings(settings)
         redirect = urlparse(settings.redirect_uri)
         if redirect.scheme != "http" or not redirect.hostname or not redirect.port:
-            raise WpsAuthError("redirect_uri 必须是本机 http 回调地址，例如 http://127.0.0.1:18765/callback")
+            raise WpsAuthError("redirect_uri 必须是本地 http 回调地址，例如 http://127.0.0.1:18765/callback")
 
         state = secrets.token_urlsafe(16)
         callback_state = _CallbackState(event=threading.Event())
@@ -288,13 +288,17 @@ class WpsOAuthService:
             return value.strip()
         return self.config_repo.get(config_key, default).strip()
 
+    def has_complete_settings(self) -> bool:
+        settings = self.load_settings()
+        return bool(settings.app_id and settings.app_secret and settings.redirect_uri)
+
     def _validate_settings(self, settings: WpsSettings) -> None:
         if not settings.app_id:
-            raise WpsAuthError("缺少 WPS APPID，请设置环境变量 FINANCE_TOOL_WPS_APP_ID 或写入本地配置。")
+            raise WpsAuthError("缺少 WPS APPID，请在软件的 WPS 配置区域填写，或设置 FINANCE_TOOL_WPS_APP_ID。")
         if not settings.app_secret:
-            raise WpsAuthError("缺少 WPS APPKEY/Secret，请设置环境变量 FINANCE_TOOL_WPS_APP_SECRET 或写入本地配置。")
+            raise WpsAuthError("缺少 WPS APP Secret，请在软件的 WPS 配置区域填写，或设置 FINANCE_TOOL_WPS_APP_SECRET。")
         if not settings.redirect_uri:
-            raise WpsAuthError("缺少 WPS redirect_uri，请设置 FINANCE_TOOL_WPS_REDIRECT_URI。")
+            raise WpsAuthError("缺少 WPS 回调地址 redirect_uri，请在软件的 WPS 配置区域填写，或设置 FINANCE_TOOL_WPS_REDIRECT_URI。")
 
     def _safe_int(self, raw: str) -> int:
         try:

@@ -16,6 +16,9 @@ from ui.main_window import MainWindow
 from utils.paths import get_database_path
 
 DEFAULT_WPS_CONFIG = {
+    "wps_app_id": "AK20260420XWYIEG",
+    "wps_app_secret": "4caada5365524cb752a15755ad2b580a",
+    "wps_redirect_uri": "http://127.0.0.1:18765/callback",
     "wps_share_url": "https://www.kdocs.cn/l/ceP77RuNMY5a",
     "wps_file_id": "513431252713",
     "wps_sheet_name": "正式映射",

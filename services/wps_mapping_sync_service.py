@@ -12,7 +12,7 @@ from repositories.config_repository import ConfigRepository
 from repositories.mapping_meta_repository import MappingMetaRepository
 from repositories.mapping_repository import MappingRepository
 from services.mapping_runtime_service import MappingRuntimeService
-from services.wps_auth_service import WpsOAuthService
+from services.wps_auth_service import WpsAuthError, WpsOAuthService
 from services.wps_openapi_client import WpsApiError, WpsOpenApiClient
 
 
@@ -61,6 +61,23 @@ class WpsMappingSyncService:
     def check_update(self, interactive_auth: bool = False) -> WpsUpdateCheckResult:
         checked_at = datetime.now(timezone.utc).isoformat()
         local_version = self.mapping_meta_repository.get("mapping_version", "")
+        if not interactive_auth and not self.auth_service.load_token():
+            result = WpsUpdateCheckResult(
+                local_version=local_version,
+                cloud_version="",
+                has_update=False,
+                checked_at=checked_at,
+                status="not_authorized",
+                message="首次安装尚未完成 WPS 授权，点击“检查更新”或“手动同步”后按浏览器提示登录一次即可。",
+            )
+            self.mapping_meta_repository.set_many(
+                {
+                    "mapping_last_check_status": result.status,
+                    "mapping_last_check_message": result.message,
+                    "mapping_last_checked_at": checked_at,
+                }
+            )
+            return result
         try:
             settings, worksheet, matrix = self.preview_sheet(interactive_auth=interactive_auth)
             cloud_version, updated_at = self._extract_cloud_metadata(matrix)
@@ -99,6 +116,23 @@ class WpsMappingSyncService:
                 }
             )
             return result
+        except WpsAuthError as exc:
+            message = str(exc)
+            self.mapping_meta_repository.set_many(
+                {
+                    "mapping_last_check_status": "failed",
+                    "mapping_last_check_message": message,
+                    "mapping_last_checked_at": checked_at,
+                }
+            )
+            return WpsUpdateCheckResult(
+                local_version=local_version,
+                cloud_version="",
+                has_update=False,
+                checked_at=checked_at,
+                status="failed",
+                message=message,
+            )
         except Exception as exc:
             self.mapping_meta_repository.set_many(
                 {

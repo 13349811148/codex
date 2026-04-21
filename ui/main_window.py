@@ -501,6 +501,31 @@ class MainWindow(QMainWindow):
         config_grid.addWidget(sheet_name_label, 1, 2)
         config_grid.addWidget(self.wps_sheet_name_edit, 1, 3)
 
+        app_id_label = QLabel("APPID")
+        app_id_label.setObjectName("PathTag")
+        self.wps_app_id_edit = QLineEdit()
+        self.wps_app_id_edit.setObjectName("FolderEdit")
+        self.wps_app_id_edit.setPlaceholderText("渚嬪 AK2026xxxx")
+        config_grid.addWidget(app_id_label, 2, 0)
+        config_grid.addWidget(self.wps_app_id_edit, 2, 1)
+
+        app_secret_label = QLabel("APP Secret")
+        app_secret_label.setObjectName("PathTag")
+        self.wps_app_secret_edit = QLineEdit()
+        self.wps_app_secret_edit.setObjectName("FolderEdit")
+        self.wps_app_secret_edit.setPlaceholderText("WPS 寮€鏀惧钩鍙扮殑 App Secret")
+        self.wps_app_secret_edit.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit)
+        config_grid.addWidget(app_secret_label, 2, 2)
+        config_grid.addWidget(self.wps_app_secret_edit, 2, 3)
+
+        redirect_label = QLabel("redirect_uri")
+        redirect_label.setObjectName("PathTag")
+        self.wps_redirect_uri_edit = QLineEdit()
+        self.wps_redirect_uri_edit.setObjectName("FolderEdit")
+        self.wps_redirect_uri_edit.setPlaceholderText("渚嬪 http://127.0.0.1:18765/callback")
+        config_grid.addWidget(redirect_label, 3, 0)
+        config_grid.addWidget(self.wps_redirect_uri_edit, 3, 1, 1, 3)
+
         config_layout.addLayout(config_grid)
 
         config_actions = QHBoxLayout()
@@ -778,6 +803,10 @@ class MainWindow(QMainWindow):
         self.wps_file_id_edit.setText(self.config_repo.get("wps_file_id", ""))
         self.wps_sheet_name_edit.setText(self.config_repo.get("wps_sheet_name", "正式映射"))
 
+        self.wps_app_id_edit.setText(self.config_repo.get("wps_app_id", ""))
+        self.wps_app_secret_edit.setText(self.config_repo.get("wps_app_secret", ""))
+        self.wps_redirect_uri_edit.setText(self.config_repo.get("wps_redirect_uri", "http://127.0.0.1:18765/callback"))
+
     def _save_wps_settings(self) -> None:
         if self._is_busy():
             QMessageBox.information(self, "提示", "当前已有任务正在处理中。")
@@ -787,6 +816,10 @@ class MainWindow(QMainWindow):
         file_id = self.wps_file_id_edit.text().strip()
         sheet_name = self.wps_sheet_name_edit.text().strip() or "正式映射"
 
+        app_id = self.wps_app_id_edit.text().strip()
+        app_secret = self.wps_app_secret_edit.text().strip()
+        redirect_uri = self.wps_redirect_uri_edit.text().strip() or "http://127.0.0.1:18765/callback"
+
         if not share_url and not file_id:
             QMessageBox.warning(self, "提示", "分享链接和 file_id 至少填写一项。")
             return
@@ -794,6 +827,9 @@ class MainWindow(QMainWindow):
         self.config_repo.set("wps_share_url", share_url)
         self.config_repo.set("wps_file_id", file_id)
         self.config_repo.set("wps_sheet_name", sheet_name)
+        self.config_repo.set("wps_app_id", app_id)
+        self.config_repo.set("wps_app_secret", app_secret)
+        self.config_repo.set("wps_redirect_uri", redirect_uri)
         self._load_wps_settings()
         self._refresh_mapping_info()
         QMessageBox.information(self, "完成", "WPS 配置已保存。")
@@ -1287,6 +1323,9 @@ class MainWindow(QMainWindow):
         self.wps_share_url_edit.setEnabled(enabled)
         self.wps_file_id_edit.setEnabled(enabled)
         self.wps_sheet_name_edit.setEnabled(enabled)
+        self.wps_app_id_edit.setEnabled(enabled)
+        self.wps_app_secret_edit.setEnabled(enabled)
+        self.wps_redirect_uri_edit.setEnabled(enabled)
         self.add_mapping_button.setEnabled(enabled)
         self.copy_selected_button.setEnabled(enabled)
         self.copy_all_button.setEnabled(enabled)
