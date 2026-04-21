@@ -1,7 +1,7 @@
 #define MyAppName "Finance Tool"
 #define MyAppDisplayName "财务统计小工具"
-#define MyAppVisibleName "财务统计小工具 V2.1"
-#define MyAppVersion "2.1.0"
+#define MyAppVisibleName "财务统计小工具 V2.2"
+#define MyAppVersion "2.2.0"
 #define MyAppPublisher "13349811148"
 #define MyAppExeName "finance_tool.exe"
 #define MyAppSourceDir "dist\finance_tool"
@@ -16,7 +16,7 @@ DefaultDirName={localappdata}\Programs\{#MyAppDisplayName}
 DefaultGroupName={#MyAppDisplayName}
 DisableProgramGroupPage=yes
 OutputDir={#GetEnv('USERPROFILE') + '\Desktop'}
-OutputBaseFilename=财务统计小工具安装包_V2.1
+OutputBaseFilename=财务统计小工具安装包_V2.2
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -24,8 +24,8 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppVisibleName}
-VersionInfoVersion=2.1.0.0
-VersionInfoProductVersion=2.1.0.0
+VersionInfoVersion=2.2.0.0
+VersionInfoProductVersion=2.2.0.0
 UsePreviousAppDir=yes
 
 [Languages]
