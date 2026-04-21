@@ -15,6 +15,12 @@ from services.wps_openapi_client import WpsOpenApiClient
 from ui.main_window import MainWindow
 from utils.paths import get_database_path
 
+DEFAULT_WPS_CONFIG = {
+    "wps_share_url": "https://www.kdocs.cn/l/ceP77RuNMY5a",
+    "wps_file_id": "513431252713",
+    "wps_sheet_name": "正式映射",
+}
+
 
 @dataclass
 class AppServices:
@@ -32,11 +38,18 @@ class AppServices:
     wps_mapping_sync_service: WpsMappingSyncService
 
 
+def seed_default_wps_config(config_repo: ConfigRepository) -> None:
+    for key, value in DEFAULT_WPS_CONFIG.items():
+        if not config_repo.get(key, "").strip():
+            config_repo.set(key, value)
+
+
 def build_app_services() -> AppServices:
     db = SqliteManager(get_database_path())
     db.initialize()
 
     config_repo = ConfigRepository(db)
+    seed_default_wps_config(config_repo)
     mapping_repo = MappingRepository(db)
     mapping_meta_repo = MappingMetaRepository(db)
     mapping_runtime_service = MappingRuntimeService(mapping_repo, mapping_meta_repo)

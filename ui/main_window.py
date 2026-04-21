@@ -7,8 +7,8 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QFileDialog,
-    QFrame,
     QGridLayout,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -169,7 +169,7 @@ class MainWindow(QMainWindow):
         self._snoozed_cloud_version = ""
         self._message_candidates: dict[int, UnmappedCandidate] = {}
 
-        self.setWindowTitle("财务统计小工具 V2")
+        self.setWindowTitle("财务统计小工具 V2.1")
         self.resize(1340, 900)
         self.setMinimumSize(1180, 760)
         self._build_ui()
@@ -234,7 +234,7 @@ class MainWindow(QMainWindow):
         brand_title = QLabel("财务统计小工具")
         brand_title.setObjectName("BrandTitle")
         brand_layout.addWidget(brand_title)
-        brand_version = QLabel("V2")
+        brand_version = QLabel("V2.1")
         brand_version.setObjectName("BrandVersion")
         brand_layout.addWidget(brand_version)
         brand_layout.addStretch(1)
@@ -458,6 +458,59 @@ class MainWindow(QMainWindow):
         self.mapping_hint_label.setObjectName("HintNeutral")
         self.mapping_hint_label.setWordWrap(True)
         info_layout.addWidget(self.mapping_hint_label)
+
+        config_board = QFrame()
+        config_board.setObjectName("Board")
+        config_layout = QVBoxLayout(config_board)
+        config_layout.setContentsMargins(18, 18, 18, 18)
+        config_layout.setSpacing(12)
+
+        config_title = QLabel("WPS 配置")
+        config_title.setObjectName("BoardTitle")
+        config_desc = QLabel("首次安装会自动带入默认在线表配置，你也可以在这里直接修改分享链接、file_id 和工作表名。")
+        config_desc.setObjectName("BoardDesc")
+        config_desc.setWordWrap(True)
+        config_layout.addWidget(config_title)
+        config_layout.addWidget(config_desc)
+
+        config_grid = QGridLayout()
+        config_grid.setHorizontalSpacing(10)
+        config_grid.setVerticalSpacing(10)
+
+        share_label = QLabel("分享链接")
+        share_label.setObjectName("PathTag")
+        self.wps_share_url_edit = QLineEdit()
+        self.wps_share_url_edit.setObjectName("FolderEdit")
+        self.wps_share_url_edit.setPlaceholderText("例如 https://www.kdocs.cn/l/xxxx")
+        config_grid.addWidget(share_label, 0, 0)
+        config_grid.addWidget(self.wps_share_url_edit, 0, 1, 1, 3)
+
+        file_id_label = QLabel("file_id")
+        file_id_label.setObjectName("PathTag")
+        self.wps_file_id_edit = QLineEdit()
+        self.wps_file_id_edit.setObjectName("FolderEdit")
+        self.wps_file_id_edit.setPlaceholderText("例如 513431252713")
+        config_grid.addWidget(file_id_label, 1, 0)
+        config_grid.addWidget(self.wps_file_id_edit, 1, 1)
+
+        sheet_name_label = QLabel("工作表名")
+        sheet_name_label.setObjectName("PathTag")
+        self.wps_sheet_name_edit = QLineEdit()
+        self.wps_sheet_name_edit.setObjectName("FolderEdit")
+        self.wps_sheet_name_edit.setPlaceholderText("默认 正式映射")
+        config_grid.addWidget(sheet_name_label, 1, 2)
+        config_grid.addWidget(self.wps_sheet_name_edit, 1, 3)
+
+        config_layout.addLayout(config_grid)
+
+        config_actions = QHBoxLayout()
+        config_actions.addStretch(1)
+        self.wps_config_save_button = QPushButton("保存WPS配置")
+        self.wps_config_save_button.setObjectName("SecondaryButton")
+        self.wps_config_save_button.clicked.connect(self._save_wps_settings)
+        config_actions.addWidget(self.wps_config_save_button)
+        config_layout.addLayout(config_actions)
+        layout.addWidget(config_board)
         layout.addWidget(info_board)
 
         table_board = QFrame()
@@ -716,8 +769,34 @@ class MainWindow(QMainWindow):
         input_dir = self.config_repo.get("default_input_dir", "")
         if input_dir:
             self.folder_edit.setText(input_dir)
+        self._load_wps_settings()
         self._load_mapping_rules()
         self._refresh_mapping_info()
+
+    def _load_wps_settings(self) -> None:
+        self.wps_share_url_edit.setText(self.config_repo.get("wps_share_url", ""))
+        self.wps_file_id_edit.setText(self.config_repo.get("wps_file_id", ""))
+        self.wps_sheet_name_edit.setText(self.config_repo.get("wps_sheet_name", "正式映射"))
+
+    def _save_wps_settings(self) -> None:
+        if self._is_busy():
+            QMessageBox.information(self, "提示", "当前已有任务正在处理中。")
+            return
+
+        share_url = self.wps_share_url_edit.text().strip()
+        file_id = self.wps_file_id_edit.text().strip()
+        sheet_name = self.wps_sheet_name_edit.text().strip() or "正式映射"
+
+        if not share_url and not file_id:
+            QMessageBox.warning(self, "提示", "分享链接和 file_id 至少填写一项。")
+            return
+
+        self.config_repo.set("wps_share_url", share_url)
+        self.config_repo.set("wps_file_id", file_id)
+        self.config_repo.set("wps_sheet_name", sheet_name)
+        self._load_wps_settings()
+        self._refresh_mapping_info()
+        QMessageBox.information(self, "完成", "WPS 配置已保存。")
 
     def _refresh_mapping_info(self) -> None:
         local_version = self.mapping_meta_repo.get("mapping_version", "未初始化")
@@ -1204,6 +1283,10 @@ class MainWindow(QMainWindow):
         self.mapping_save_button.setEnabled(enabled)
         self.mapping_add_button.setEnabled(enabled)
         self.mapping_delete_button.setEnabled(enabled)
+        self.wps_config_save_button.setEnabled(enabled)
+        self.wps_share_url_edit.setEnabled(enabled)
+        self.wps_file_id_edit.setEnabled(enabled)
+        self.wps_sheet_name_edit.setEnabled(enabled)
         self.add_mapping_button.setEnabled(enabled)
         self.copy_selected_button.setEnabled(enabled)
         self.copy_all_button.setEnabled(enabled)
