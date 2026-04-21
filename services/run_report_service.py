@@ -5,7 +5,7 @@ from typing import Callable, List
 from domain.amount_normalizer import normalize_amount
 from domain.classifier import TAOBAO_LIKE_PLATFORMS
 from domain.remark_normalizer import normalize_taobao_remark
-from models.dto import NormalizedRecord, RunProgress, RunResult
+from models.dto import NormalizedRecord, RunProgress, RunResult, UnmappedCandidate
 from repositories.config_repository import ConfigRepository
 from repositories.run_log_repository import RunLogRepository
 from services.aggregate_service import AggregateService
@@ -38,6 +38,8 @@ class RunReportService:
         errors: List[str] = []
         warnings: list[str] = []
         seen_warnings: set[str] = set()
+        unmapped_candidates: list[UnmappedCandidate] = []
+        seen_unmapped_keys: set[tuple[str, str]] = set()
         normalized_records: List[NormalizedRecord] = []
         success_count = 0
         failed_count = 0
@@ -101,6 +103,11 @@ class RunReportService:
                         if record.warning_message and record.warning_message not in seen_warnings:
                             seen_warnings.add(record.warning_message)
                             warnings.append(record.warning_message)
+                        if record.unmapped_candidate is not None:
+                            unmapped_key = (record.unmapped_candidate.platform, record.unmapped_candidate.match_key)
+                            if unmapped_key not in seen_unmapped_keys:
+                                seen_unmapped_keys.add(unmapped_key)
+                                unmapped_candidates.append(record.unmapped_candidate)
                         normalized_records.append(record)
                     except Exception as record_exc:
                         errors.append(f"{task.path.name}: {record_exc}")
@@ -142,6 +149,7 @@ class RunReportService:
             export_path=export_path,
             errors=errors,
             warnings=warnings,
+            unmapped_candidates=unmapped_candidates,
         )
         self.run_log_repo.add_run(
             input_dir=input_dir,

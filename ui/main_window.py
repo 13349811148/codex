@@ -24,7 +24,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from models.dto import RunProgress, RunResult
+from domain.classifier import RULE_SEPARATOR
+from models.dto import RunProgress, RunResult, UnmappedCandidate
 from models.entities import MappingRule
 from models.wps import WpsPublishResult, WpsSyncResult, WpsUpdateCheckResult
 from repositories.config_repository import ConfigRepository
@@ -166,8 +167,9 @@ class MainWindow(QMainWindow):
         self._check_context = "manual"
         self._check_modal = False
         self._snoozed_cloud_version = ""
+        self._message_candidates: dict[int, UnmappedCandidate] = {}
 
-        self.setWindowTitle("财务统计小工具 V1.2")
+        self.setWindowTitle("财务统计小工具 V2")
         self.resize(1340, 900)
         self.setMinimumSize(1180, 760)
         self._build_ui()
@@ -179,7 +181,7 @@ class MainWindow(QMainWindow):
         central.setObjectName("Root")
         root_layout = QVBoxLayout(central)
         root_layout.setContentsMargins(18, 18, 18, 18)
-        root_layout.setSpacing(18)
+        root_layout.setSpacing(12)
 
         surface = QFrame()
         surface.setObjectName("Surface")
@@ -218,6 +220,7 @@ class MainWindow(QMainWindow):
     def _build_masthead(self) -> QFrame:
         masthead = QFrame()
         masthead.setObjectName("Masthead")
+        masthead.setFixedHeight(72)
         layout = QHBoxLayout(masthead)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -226,38 +229,30 @@ class MainWindow(QMainWindow):
         brand_panel.setObjectName("BrandPanel")
         brand_panel.setFixedWidth(250)
         brand_layout = QVBoxLayout(brand_panel)
-        brand_layout.setContentsMargins(24, 24, 24, 24)
-        brand_layout.setSpacing(8)
-        brand_layout.addStretch()
+        brand_layout.setContentsMargins(24, 14, 24, 14)
+        brand_layout.setSpacing(0)
         brand_title = QLabel("财务统计小工具")
         brand_title.setObjectName("BrandTitle")
         brand_layout.addWidget(brand_title)
-        brand_layout.addStretch()
+        brand_version = QLabel("V2")
+        brand_version.setObjectName("BrandVersion")
+        brand_layout.addWidget(brand_version)
+        brand_layout.addStretch(1)
 
         top_panel = QFrame()
         top_panel.setObjectName("TopPanel")
         top_layout = QVBoxLayout(top_panel)
-        top_layout.setContentsMargins(22, 18, 22, 18)
-        top_layout.setSpacing(14)
+        top_layout.setContentsMargins(18, 10, 18, 10)
+        top_layout.setSpacing(0)
 
         toolbar = QHBoxLayout()
-        chips_layout = QHBoxLayout()
-        chips_layout.setSpacing(8)
-        chips_layout.addWidget(self._create_chip("V1.2", active=True))
-        chips_layout.addWidget(self._create_chip("淘宝 / 天猫 / 淘工厂 / 淘农场 / 拼多多"))
-        chips_layout.addWidget(self._create_chip("CSV / XLS / XLSX"))
-        chips_layout.addStretch()
-        toolbar.addLayout(chips_layout, 1)
+        toolbar.addStretch(1)
 
         self.status_badge = QLabel()
         self.status_badge.setObjectName("StatusBadge")
-        toolbar.addWidget(self.status_badge, 0, Qt.AlignRight)
+        toolbar.addWidget(self.status_badge, 0, Qt.AlignVCenter | Qt.AlignRight)
         top_layout.addLayout(toolbar)
-
-        intro = QLabel("支持账单统计、分类映射编辑、云端版本检查和异常信息集中查看。")
-        intro.setObjectName("BoardDesc")
-        intro.setWordWrap(True)
-        top_layout.addWidget(intro)
+        top_layout.addStretch(1)
 
         layout.addWidget(brand_panel)
         layout.addWidget(top_panel, 1)
@@ -268,8 +263,8 @@ class MainWindow(QMainWindow):
         sidebar.setObjectName("Sidebar")
         sidebar.setFixedWidth(250)
         layout = QVBoxLayout(sidebar)
-        layout.setContentsMargins(18, 20, 18, 20)
-        layout.setSpacing(14)
+        layout.setContentsMargins(16, 20, 16, 20)
+        layout.setSpacing(24)
         side_title = QLabel("功能分区")
         side_title.setObjectName("SidebarTitle")
         layout.addWidget(side_title)
@@ -283,21 +278,17 @@ class MainWindow(QMainWindow):
         page = QWidget()
         page.setObjectName("Page")
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(22, 22, 22, 22)
-        layout.setSpacing(18)
+        layout.setContentsMargins(22, 12, 22, 22)
+        layout.setSpacing(14)
 
         controls = QFrame()
         controls.setObjectName("Board")
         controls_layout = QVBoxLayout(controls)
         controls_layout.setContentsMargins(18, 18, 18, 18)
-        controls_layout.setSpacing(12)
+        controls_layout.setSpacing(10)
         controls_title = QLabel("账单统计")
         controls_title.setObjectName("BoardTitle")
-        controls_desc = QLabel("选择账单目录并生成汇总报表，处理过程保持界面响应并显示进度。")
-        controls_desc.setObjectName("BoardDesc")
-        controls_desc.setWordWrap(True)
         controls_layout.addWidget(controls_title)
-        controls_layout.addWidget(controls_desc)
 
         path_row = QHBoxLayout()
         path_row.setSpacing(10)
@@ -342,7 +333,7 @@ class MainWindow(QMainWindow):
         self.mapping_overview_local_label.setObjectName("DataLabel")
         self.mapping_overview_cloud_label = QLabel("云端版本：-")
         self.mapping_overview_cloud_label.setObjectName("DataLabel")
-        self.mapping_overview_status_label = QLabel("检查状态：-")
+        self.mapping_overview_status_label = QLabel("映射状态：-")
         self.mapping_overview_status_label.setObjectName("DataLabel")
         mapping_overview_layout.addWidget(overview_title)
         mapping_overview_layout.addWidget(overview_desc)
@@ -353,18 +344,16 @@ class MainWindow(QMainWindow):
 
         progress_board = QFrame()
         progress_board.setObjectName("Board")
+        progress_board.setMinimumHeight(170)
         progress_layout = QVBoxLayout(progress_board)
-        progress_layout.setContentsMargins(18, 18, 18, 18)
-        progress_layout.setSpacing(12)
+        progress_layout.setContentsMargins(20, 20, 20, 20)
+        progress_layout.setSpacing(16)
         progress_head = QHBoxLayout()
         progress_text = QVBoxLayout()
+        progress_text.setSpacing(6)
         progress_title = QLabel("运行进度")
         progress_title.setObjectName("BoardTitle")
-        progress_desc = QLabel("后台线程执行导入、分类、汇总与导出，避免界面卡死。")
-        progress_desc.setObjectName("BoardDesc")
-        progress_desc.setWordWrap(True)
         progress_text.addWidget(progress_title)
-        progress_text.addWidget(progress_desc)
         self.progress_percent_label = QLabel("0%")
         self.progress_percent_label.setObjectName("ProgressPercent")
         progress_head.addLayout(progress_text, 1)
@@ -373,8 +362,10 @@ class MainWindow(QMainWindow):
 
         self.status_label = QLabel("状态：待执行")
         self.status_label.setObjectName("DataLabel")
+        self.status_label.setWordWrap(True)
         self.progress_label = QLabel("进度：-")
         self.progress_label.setObjectName("DataLabel")
+        self.progress_label.setWordWrap(True)
         self.progress_bar = QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
@@ -537,20 +528,25 @@ class MainWindow(QMainWindow):
         self.copy_all_button = QPushButton("复制全部")
         self.copy_all_button.setObjectName("SecondaryButton")
         self.copy_all_button.clicked.connect(self._copy_all_messages)
+        self.add_mapping_button = QPushButton("加入映射")
+        self.add_mapping_button.setObjectName("SecondaryButton")
+        self.add_mapping_button.clicked.connect(self._add_selected_messages_to_mapping)
+        head.addWidget(self.add_mapping_button)
         head.addWidget(self.copy_selected_button)
         head.addWidget(self.copy_all_button)
         board_layout.addLayout(head)
 
-        self.error_table = QTableWidget(0, 2)
-        self.error_table.setHorizontalHeaderLabels(["类型", "内容"])
+        self.error_table = QTableWidget(0, 3)
+        self.error_table.setHorizontalHeaderLabels(["选择", "类型", "内容"])
         self.error_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.error_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.error_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.error_table.setAlternatingRowColors(True)
         self.error_table.verticalHeader().setVisible(False)
         self.error_table.horizontalHeader().setStretchLastSection(True)
         self.error_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
-        self.error_table.setColumnWidth(0, 110)
+        self.error_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
+        self.error_table.setColumnWidth(0, 74)
+        self.error_table.setColumnWidth(1, 110)
         board_layout.addWidget(self.error_table)
         layout.addWidget(board, 1)
 
@@ -594,6 +590,7 @@ class MainWindow(QMainWindow):
             QFrame#Surface { background: rgba(255, 253, 250, 0.92); border: 1px solid #ddd6cb; border-radius: 28px; }
             QFrame#BrandPanel { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #23453c,stop:1 #1a332d); }
             QLabel#BrandTitle { color: #fbfaf6; font-size: 24px; font-weight: 700; }
+            QLabel#BrandVersion { color: rgba(251, 250, 246, 0.72); font-size: 12px; font-weight: 700; letter-spacing: 1px; margin-top: 6px; }
             QLabel#Chip, QLabel#ChipActive, QLabel#PathTag { padding: 8px 14px; border-radius: 999px; background: #fffdfa; border: 1px solid #ddd6cb; color: #736f67; }
             QLabel#ChipActive { background: #dde8e4; color: #23453c; font-weight: 700; border-color: #c8dcd5; }
             QLabel#PathTag { font-weight: 700; color: #5d564c; }
@@ -605,24 +602,24 @@ class MainWindow(QMainWindow):
             QPushButton#SecondaryButton { background: #fffdfa; color: #3f3a33; border: 1px solid #d7d0c5; }
             QPushButton#SecondaryButton:hover { background: #f6f2ea; }
             QPushButton:disabled { background: #e7e1d8; color: #9a9387; border-color: #dfd8ce; }
-            QFrame#Sidebar { background: rgba(248, 245, 239, 0.92); border-right: 1px solid #ddd6cb; }
-            QLabel#SidebarTitle { color: #736f67; font-size: 12px; font-weight: 700; }
-            QPushButton#NavButton { min-height: 44px; padding: 0 14px; text-align: left; border-radius: 12px; border: 1px solid transparent; background: transparent; color: #5a544b; font-weight: 600; }
-            QPushButton#NavButton:hover { background: #f6f0e7; border-color: #e1d8cb; }
-            QPushButton#NavButton[active="true"] { background: #fffdfa; border-color: #ddd6cb; color: #23453c; font-weight: 700; }
+            QFrame#Sidebar { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgba(247, 243, 236, 0.96),stop:1 rgba(241, 235, 226, 0.98)); border-right: 1px solid #ddd6cb; }
+            QLabel#SidebarTitle { color: #6f675c; font-size: 13px; font-weight: 700; padding-left: 4px; margin-bottom: 6px; }
+            QPushButton#NavButton { min-height: 96px; padding: 0 22px; text-align: left; border-radius: 22px; border: 1px solid #d8cebf; background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #fffdfa,stop:0.58 #f5eee4,stop:1 #ede3d5); color: #4f493f; font-size: 18px; font-weight: 700; }
+            QPushButton#NavButton:hover { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #fffefc,stop:0.58 #f1e7da,stop:1 #e6d9c8); border-color: #cdbfae; }
+            QPushButton#NavButton[active="true"] { background: qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #ffffff,stop:0.4 #f8f2ea,stop:1 #e9decd); border-color: #c7b5a0; color: #1f4339; padding-left: 26px; }
             QFrame#MetricCard, QFrame#Board { background: #fffdfa; border: 1px solid #ddd6cb; border-radius: 18px; }
             QLabel#MetricValue { color: #23453c; font-size: 28px; font-weight: 700; }
             QLabel#MetricCaption { color: #736f67; font-size: 12px; }
             QLabel#BoardTitle { color: #272621; font-size: 18px; font-weight: 700; }
             QLabel#BoardDesc { color: #736f67; font-size: 13px; line-height: 1.6; }
-            QLabel#ProgressPercent { color: #23453c; font-size: 26px; font-weight: 700; }
+            QLabel#ProgressPercent { color: #23453c; font-size: 34px; font-weight: 700; min-width: 92px; }
             QLabel#DataLabel { color: #403a31; font-size: 13px; line-height: 1.6; }
             QLabel#HintNeutral, QLabel#HintWarning, QLabel#HintSuccess, QLabel#HintError { padding: 12px 14px; border-radius: 12px; border: 1px solid #ddd6cb; line-height: 1.6; }
             QLabel#HintNeutral { background: #f6f2ea; color: #5d564c; border-color: #e2d7c8; }
             QLabel#HintWarning { background: #fbf2d8; color: #8a6116; border-color: #ead498; }
             QLabel#HintSuccess { background: #e1eee8; color: #23453c; border-color: #c9dfd5; }
             QLabel#HintError { background: #f4e0dd; color: #8b463e; border-color: #e9c2bc; }
-            QProgressBar { min-height: 12px; max-height: 12px; border: none; border-radius: 999px; background: #ece6dc; text-align: center; }
+            QProgressBar { min-height: 14px; max-height: 14px; border: none; border-radius: 999px; background: #ece6dc; text-align: center; }
             QProgressBar::chunk { border-radius: 999px; background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #b18d54,stop:1 #23453c); }
             QTableWidget { border: 1px solid #ddd6cb; border-radius: 14px; gridline-color: #ebe3d8; background: #fffdfa; alternate-background-color: #faf7f1; color: #2f2b26; selection-background-color: #e7efec; selection-color: #23453c; }
             QHeaderView::section { background: #f8f5ef; padding: 10px 12px; border: none; border-bottom: 1px solid #ddd6cb; color: #736f67; font-weight: 700; }
@@ -645,8 +642,6 @@ class MainWindow(QMainWindow):
             self.page_stack.setCurrentIndex(self.page_indexes[key])
         if key == "mapping":
             self._load_mapping_rules()
-            if run_mapping_check:
-                self._check_mapping_update(trigger="page", interactive_auth=False, allow_modal=False)
 
     def _set_status_badge(self, text: str, status: str) -> None:
         styles = {
@@ -658,10 +653,10 @@ class MainWindow(QMainWindow):
         }
         self.status_badge.setText(text)
         self.status_badge.setAlignment(Qt.AlignCenter)
-        self.status_badge.setMinimumHeight(36)
-        self.status_badge.setMinimumWidth(96)
+        self.status_badge.setMinimumHeight(40)
+        self.status_badge.setMinimumWidth(108)
         self.status_badge.setStyleSheet(
-            "padding: 0 14px; border-radius: 999px; font-size: 12px; font-weight: 700;"
+            "padding: 0 18px; border-radius: 999px; font-size: 13px; font-weight: 700;"
             + styles.get(status, styles["idle"])
         )
 
@@ -677,23 +672,45 @@ class MainWindow(QMainWindow):
 
     def _clear_messages(self) -> None:
         self.error_table.setRowCount(0)
+        self._message_candidates.clear()
 
-    def _append_message_row(self, message_type: str, content: str) -> None:
+    def _append_message_row(
+        self,
+        message_type: str,
+        content: str,
+        candidate: UnmappedCandidate | None = None,
+    ) -> None:
         row = self.error_table.rowCount()
         self.error_table.insertRow(row)
+        check_item = QTableWidgetItem()
+        check_item.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+        check_item.setCheckState(Qt.Unchecked)
         type_item = QTableWidgetItem(message_type)
         type_item.setTextAlignment(Qt.AlignCenter)
+        type_item.setFlags(type_item.flags() & ~Qt.ItemIsEditable)
         content_item = QTableWidgetItem(content)
         content_item.setToolTip(content)
-        self.error_table.setItem(row, 0, type_item)
-        self.error_table.setItem(row, 1, content_item)
+        content_item.setFlags(content_item.flags() & ~Qt.ItemIsEditable)
+        self.error_table.setItem(row, 0, check_item)
+        self.error_table.setItem(row, 1, type_item)
+        self.error_table.setItem(row, 2, content_item)
+        if candidate is not None:
+            self._message_candidates[row] = candidate
 
     def _row_message(self, row: int) -> str:
-        message_type = self.error_table.item(row, 0)
-        content = self.error_table.item(row, 1)
+        message_type = self.error_table.item(row, 1)
+        content = self.error_table.item(row, 2)
         left = message_type.text() if message_type is not None else ""
         right = content.text() if content is not None else ""
         return f"[{left}] {right}" if left else right
+
+    def _checked_message_rows(self) -> list[int]:
+        rows: list[int] = []
+        for row in range(self.error_table.rowCount()):
+            item = self.error_table.item(row, 0)
+            if item is not None and item.checkState() == Qt.Checked:
+                rows.append(row)
+        return rows
 
     def _load_defaults(self) -> None:
         input_dir = self.config_repo.get("default_input_dir", "")
@@ -709,10 +726,11 @@ class MainWindow(QMainWindow):
         check_message = self.mapping_meta_repo.get("mapping_last_check_message", "尚未执行版本检查")
         checked_at = self.mapping_meta_repo.get("mapping_last_checked_at", "未检查")
         source_url = self.mapping_meta_repo.get("mapping_source_url", "builtin://domain.classifier")
+        overview_status = self._mapping_overview_status_text(check_status, check_message, cloud_version)
 
         self.mapping_overview_local_label.setText(f"本地版本：{local_version}")
         self.mapping_overview_cloud_label.setText(f"云端版本：{cloud_version or '未提供'}")
-        self.mapping_overview_status_label.setText(f"检查状态：{check_status} / {check_message}")
+        self.mapping_overview_status_label.setText(f"映射状态：{overview_status}")
 
         self.mapping_local_version_label.setText(f"本地版本：{local_version}")
         self.mapping_cloud_version_label.setText(f"云端版本：{cloud_version or '未提供'}")
@@ -721,6 +739,19 @@ class MainWindow(QMainWindow):
         self.mapping_source_label.setText(f"映射来源：{source_url}")
 
         self._set_mapping_hint(check_status, check_message, cloud_version)
+
+    def _mapping_overview_status_text(self, status: str, message: str, cloud_version: str) -> str:
+        if status == "up_to_date":
+            return f"已更新到最新{f'：{cloud_version}' if cloud_version else ''}"
+        if status == "update_available":
+            return f"检测到云端更新{f'：{cloud_version}' if cloud_version else ''}"
+        if status == "missing_cloud_version":
+            return "云端未配置版本号"
+        if status == "failed":
+            return f"最近检查失败：{message}"
+        if message:
+            return message
+        return "尚未执行版本检查"
 
     def _set_mapping_hint(self, status: str, message: str, cloud_version: str) -> None:
         if status == "update_available":
@@ -986,7 +1017,8 @@ class MainWindow(QMainWindow):
         for error in result.errors:
             self._append_message_row("异常", error)
         for warning in result.warnings:
-            self._append_message_row("提醒", warning)
+            candidate = next((item for item in result.unmapped_candidates if item.warning_message == warning), None)
+            self._append_message_row("提醒", warning, candidate=candidate)
         self.error_table.resizeRowsToContents()
 
         self._set_running_state(False)
@@ -1172,6 +1204,7 @@ class MainWindow(QMainWindow):
         self.mapping_save_button.setEnabled(enabled)
         self.mapping_add_button.setEnabled(enabled)
         self.mapping_delete_button.setEnabled(enabled)
+        self.add_mapping_button.setEnabled(enabled)
         self.copy_selected_button.setEnabled(enabled)
         self.copy_all_button.setEnabled(enabled)
 
@@ -1208,9 +1241,9 @@ class MainWindow(QMainWindow):
         self.mapping_dirty = True
 
     def _copy_selected_messages(self) -> None:
-        rows = sorted({index.row() for index in self.error_table.selectedIndexes()})
+        rows = self._checked_message_rows() or sorted({index.row() for index in self.error_table.selectedIndexes()})
         if not rows:
-            QMessageBox.information(self, "提示", "请先选择要复制的异常信息。")
+            QMessageBox.information(self, "提示", "请先勾选或选中要复制的异常信息。")
             return
         self._copy_messages([self._row_message(row) for row in rows])
 
@@ -1223,6 +1256,68 @@ class MainWindow(QMainWindow):
     def _copy_messages(self, messages: list[str]) -> None:
         QApplication.clipboard().setText("\n".join(messages))
         QMessageBox.information(self, "完成", f"已复制 {len(messages)} 条异常信息。")
+
+    def _add_selected_messages_to_mapping(self) -> None:
+        rows = self._checked_message_rows() or sorted({index.row() for index in self.error_table.selectedIndexes()})
+        if not rows:
+            QMessageBox.information(self, "提示", "请先勾选或选中要加入映射的未匹配提醒。")
+            return
+
+        selected_candidates = [self._message_candidates[row] for row in rows if row in self._message_candidates]
+        if not selected_candidates:
+            QMessageBox.information(self, "提示", "当前选中项里没有可加入映射的未匹配提醒。")
+            return
+
+        self._navigate_to_page("mapping", run_mapping_check=False)
+        existing_keys = {
+            (
+                self._table_text(self.mapping_table, row, 0),
+                self._build_match_key_from_values(
+                    self._table_text(self.mapping_table, row, 0),
+                    self._table_text(self.mapping_table, row, 1),
+                    self._table_text(self.mapping_table, row, 2),
+                ),
+            )
+            for row in range(self.mapping_table.rowCount())
+        }
+
+        added_count = 0
+        for candidate in selected_candidates:
+            dedupe_key = (candidate.platform, candidate.match_key)
+            if dedupe_key in existing_keys:
+                continue
+            self._loading_mapping_table = True
+            self._append_mapping_rule(
+                MappingRule(
+                    platform=candidate.platform,
+                    match_key="",
+                    remark_norm=candidate.remark_norm,
+                    biz_desc=candidate.biz_desc,
+                    detail_category="暂未分类",
+                    major_category="暂未分类",
+                )
+            )
+            self._loading_mapping_table = False
+            existing_keys.add(dedupe_key)
+            added_count += 1
+
+        if added_count <= 0:
+            QMessageBox.information(self, "提示", "所选未匹配项已存在于分类映射表中。")
+            return
+
+        self.mapping_dirty = True
+        self.mapping_table.resizeRowsToContents()
+        self.mapping_table.setCurrentCell(self.mapping_table.rowCount() - 1, 0)
+        QMessageBox.information(
+            self,
+            "已加入映射",
+            f"已将 {added_count} 条未匹配项加入分类映射表，请检查分类后再保存并上传云端。",
+        )
+
+    def _build_match_key_from_values(self, platform: str, remark_norm: str, biz_desc: str) -> str:
+        if platform == "拼多多":
+            return biz_desc or "[空]"
+        return f"{(remark_norm or '[空]')}{RULE_SEPARATOR}{(biz_desc or '[空]')}"
 
     def _table_text(self, table: QTableWidget, row: int, column: int) -> str:
         item = table.item(row, column)

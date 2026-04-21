@@ -81,9 +81,14 @@
 - [x] 10.7 检测到云端版本更新时弹框询问是否立即同步
 - [x] 10.8 记录并展示 `mapping_cloud_version / mapping_last_check_status / mapping_last_checked_at`
 
-## 11. Next Work
+## 11. Enhancement Backlog
 - [ ] 11.1 增加软件内配置 `wps_file_id` 的界面，减少命令行依赖
-- [ ] 11.2 自动过滤金额为 `0` 的空记录，减少异常噪音
+- [x] 11.2 自动过滤金额为 `0` 的空记录，减少异常噪音
 - [ ] 11.3 增加导出成功后打开目录的能力
 - [x] 11.4 将分类映射页的修改直接写回 WPS 云端表格
 - [x] 11.5 保存云端修改时自动更新 `mapping_version / updated_at`
+
+## 12. Release
+- [x] 12.1 按当前代码状态同步 OpenSpec 任务清单
+- [x] 12.2 生成最新安装包
+- [ ] 12.3 上传当前代码、文档与打包信息到 GitHub

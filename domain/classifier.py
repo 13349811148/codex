@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from models.dto import NormalizedRecord
+from models.dto import NormalizedRecord, UnmappedCandidate
 from models.entities import MappingRule
 
 
@@ -111,6 +111,14 @@ def classify_record(
             record.detail_category = "暂未分类"
             record.major_category = "暂未分类"
             record.warning_message = _build_unmapped_warning(record.store_name, key)
+            record.unmapped_candidate = UnmappedCandidate(
+                platform=record.platform,
+                store_name=record.store_name,
+                remark_norm=record.remark_norm,
+                biz_desc=record.biz_desc,
+                match_key=key,
+                warning_message=record.warning_message,
+            )
             return record
 
         record.detail_category, record.major_category = matched
@@ -122,6 +130,14 @@ def classify_record(
             record.detail_category = "暂未分类"
             record.major_category = "暂未分类"
             record.warning_message = _build_unmapped_warning(record.store_name, record.biz_desc)
+            record.unmapped_candidate = UnmappedCandidate(
+                platform=record.platform,
+                store_name=record.store_name,
+                remark_norm="[空]",
+                biz_desc=record.biz_desc,
+                match_key=record.biz_desc,
+                warning_message=record.warning_message,
+            )
             return record
 
         record.detail_category, record.major_category = matched

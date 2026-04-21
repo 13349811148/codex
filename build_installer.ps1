@@ -23,6 +23,8 @@ $pyArgs = @(
     "--distpath", "dist",
     "--workpath", "build",
     "--add-data", "db\schema.sql;db",
+    "--add-data", "assets\app.ico;assets",
+    "--icon", "assets\app.ico",
     "main.pyw"
 )
 

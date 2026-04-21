@@ -25,6 +25,12 @@
 installer_output\finance-tool-v1.2-setup.exe
 ```
 
+## 最新构建
+
+- 最近一次构建日期：`2026-04-21`
+- 安装包路径：`installer_output\finance-tool-v1.2-setup.exe`
+- 本次构建已重新执行 `build_installer.ps1`
+
 ## 运行时数据目录
 软件安装后，配置和数据库写入：
 

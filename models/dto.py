@@ -52,6 +52,17 @@ class NormalizedRecord:
     source_file: str
     source_sheet: str
     source_type: str
+    unmapped_candidate: "UnmappedCandidate | None" = None
+
+
+@dataclass
+class UnmappedCandidate:
+    platform: str
+    store_name: str
+    remark_norm: str
+    biz_desc: str
+    match_key: str
+    warning_message: str
 
 
 @dataclass
@@ -63,6 +74,7 @@ class RunResult:
     export_path: str
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    unmapped_candidates: list[UnmappedCandidate] = field(default_factory=list)
 
 
 @dataclass
