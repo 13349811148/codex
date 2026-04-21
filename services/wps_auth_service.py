@@ -119,6 +119,14 @@ class WpsOAuthService:
             scopes=scopes,
         )
 
+    def clear_token(self) -> None:
+        self.config_repo.set("wps_access_token", "")
+        self.config_repo.set("wps_refresh_token", "")
+        self.config_repo.set("wps_token_type", "bearer")
+        self.config_repo.set("wps_expires_at", "0")
+        self.config_repo.set("wps_refresh_expires_at", "0")
+        self.config_repo.set("wps_token_scopes", "")
+
     def build_authorize_url(self, scopes: Iterable[str], state: str) -> str:
         settings = self.load_settings()
         self._validate_settings(settings)
@@ -195,16 +203,25 @@ class WpsOAuthService:
         if current is None or not current.refresh_token:
             raise WpsAuthError("当前没有可用的 refresh_token，请先重新执行 WPS 授权。")
         if current.refresh_expired():
-            raise WpsAuthError("refresh_token 已过期，请先重新执行 WPS 授权。")
+            self.clear_token()
+            raise WpsAuthError("WPS 登录已失效，请重新授权。")
 
-        payload = self._token_request(
-            {
-                "grant_type": "refresh_token",
-                "refresh_token": current.refresh_token,
-                "client_id": settings.app_id,
-                "client_secret": settings.app_secret,
-            }
-        )
+        try:
+            payload = self._token_request(
+                {
+                    "grant_type": "refresh_token",
+                    "refresh_token": current.refresh_token,
+                    "client_id": settings.app_id,
+                    "client_secret": settings.app_secret,
+                }
+            )
+        except WpsAuthError as exc:
+            error_text = str(exc).lower()
+            if "invalid_grant" in error_text or "refresh token" in error_text:
+                self.clear_token()
+                raise WpsAuthError("WPS 登录已失效，请重新授权。") from exc
+            raise
+
         refreshed = self._build_token(payload)
         self._save_token(refreshed, current.scopes)
         return refreshed
@@ -228,9 +245,19 @@ class WpsOAuthService:
         if current and not current.is_expired():
             return current.access_token
         if current and current.refresh_token and not current.refresh_expired():
-            return self.refresh_access_token().access_token
+            try:
+                return self.refresh_access_token().access_token
+            except WpsAuthError:
+                if not interactive:
+                    raise
+                requested_scopes = sorted(required_scope_set) if required_scope_set else list(current_scope_set) or [
+                    "kso.sheets.read"
+                ]
+                return self.authorize_interactive(requested_scopes).access_token
         if interactive:
-            requested_scopes = sorted(required_scope_set) if required_scope_set else list(current_scope_set) or ["kso.sheets.read"]
+            requested_scopes = sorted(required_scope_set) if required_scope_set else list(current_scope_set) or [
+                "kso.sheets.read"
+            ]
             return self.authorize_interactive(requested_scopes).access_token
 
         raise WpsAuthError("当前没有可用的 WPS access_token，请先执行授权。")
@@ -261,7 +288,7 @@ class WpsOAuthService:
         now = int(time.time())
         access_token = payload.get("access_token", "")
         if not access_token:
-            message = payload.get("msg") or payload.get("message") or "返回中缺少 access_token"
+            message = payload.get("msg") or payload.get("message") or "返回结果中缺少 access_token"
             raise WpsAuthError(f"WPS token 响应无效：{message}")
         expires_in = self._safe_int(str(payload.get("expires_in", 0)))
         refresh_expires_in = self._safe_int(str(payload.get("refresh_expires_in", 0)))

@@ -59,11 +59,11 @@ class WpsOpenApiClient:
         except urllib.error.HTTPError as exc:
             payload = self._read_error_payload(exc)
             if exc.code == 401 and retry_on_refresh:
-                try:
-                    self.auth_service.refresh_access_token()
-                except WpsAuthError:
-                    pass
-                else:
+                recovered = self._recover_authorization(
+                    interactive_auth=interactive_auth,
+                    required_scopes=required_scopes,
+                )
+                if recovered:
                     return self.request_json(
                         method,
                         path,
@@ -81,6 +81,16 @@ class WpsOpenApiClient:
         if isinstance(payload, dict) and payload.get("code") not in (None, 0):
             raise self._build_error(200, payload)
         return payload
+
+    def _recover_authorization(self, *, interactive_auth: bool, required_scopes: list[str] | None) -> bool:
+        try:
+            self.auth_service.refresh_access_token()
+            return True
+        except WpsAuthError:
+            if not interactive_auth:
+                return False
+            self.auth_service.get_valid_access_token(required_scopes=required_scopes, interactive=True)
+            return True
 
     def _read_error_payload(self, exc: urllib.error.HTTPError) -> dict[str, Any]:
         raw = exc.read().decode("utf-8", "ignore")
