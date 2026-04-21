@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
+    QComboBox,
     QFileDialog,
     QGridLayout,
     QFrame,
@@ -34,6 +36,13 @@ from services.mapping_editor_service import MappingEditorService
 from services.run_report_service import RunReportService
 from services.wps_mapping_sync_service import WpsMappingSyncService
 from utils.paths import build_default_export_filename
+
+
+@dataclass
+class MessageEntry:
+    message_type: str
+    content: str
+    candidate: UnmappedCandidate | None = None
 
 
 class ReportWorker(QObject):
@@ -167,9 +176,10 @@ class MainWindow(QMainWindow):
         self._check_context = "manual"
         self._check_modal = False
         self._snoozed_cloud_version = ""
+        self._message_entries: list[MessageEntry] = []
         self._message_candidates: dict[int, UnmappedCandidate] = {}
 
-        self.setWindowTitle("财务统计小工具 V2.3")
+        self.setWindowTitle("财务统计小工具 V2.4")
         self.resize(1340, 900)
         self.setMinimumSize(1180, 760)
         self._build_ui()
@@ -235,7 +245,7 @@ class MainWindow(QMainWindow):
         brand_title = QLabel("财务统计小工具")
         brand_title.setObjectName("BrandTitle")
         brand_layout.addWidget(brand_title)
-        brand_version = QLabel("V2.3")
+        brand_version = QLabel("V2.4")
         brand_version.setObjectName("BrandVersion")
         brand_layout.addWidget(brand_version)
         brand_layout.addStretch(1)
@@ -533,10 +543,31 @@ class MainWindow(QMainWindow):
         self.add_mapping_button = QPushButton("加入映射")
         self.add_mapping_button.setObjectName("SecondaryButton")
         self.add_mapping_button.clicked.connect(self._add_selected_messages_to_mapping)
+        self.add_filtered_mapping_button = QPushButton("一键加入当前筛选")
+        self.add_filtered_mapping_button.setObjectName("SecondaryButton")
+        self.add_filtered_mapping_button.clicked.connect(self._add_filtered_messages_to_mapping)
         head.addWidget(self.add_mapping_button)
         head.addWidget(self.copy_selected_button)
         head.addWidget(self.copy_all_button)
         board_layout.addLayout(head)
+
+        filter_row = QHBoxLayout()
+        filter_row.setSpacing(10)
+        filter_label = QLabel("消息筛选")
+        filter_label.setObjectName("PathTag")
+        self.message_filter_combo = QComboBox()
+        self.message_filter_combo.addItem("全部消息", "all")
+        self.message_filter_combo.addItem("仅未匹配映射提醒", "unmapped")
+        self.message_filter_combo.addItem("仅异常消息", "error")
+        self.message_filter_combo.currentIndexChanged.connect(lambda _index: self._refresh_message_table())
+        self.message_filter_summary = QLabel("")
+        self.message_filter_summary.setObjectName("BoardDesc")
+        self.message_filter_summary.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        filter_row.addWidget(filter_label)
+        filter_row.addWidget(self.message_filter_combo)
+        filter_row.addWidget(self.message_filter_summary, 1)
+        filter_row.addWidget(self.add_filtered_mapping_button)
+        board_layout.addLayout(filter_row)
 
         self.error_table = QTableWidget(0, 3)
         self.error_table.setHorizontalHeaderLabels(["选择", "类型", "内容"])
@@ -550,6 +581,7 @@ class MainWindow(QMainWindow):
         self.error_table.setColumnWidth(0, 74)
         self.error_table.setColumnWidth(1, 110)
         board_layout.addWidget(self.error_table)
+        self._update_message_filter_summary()
         layout.addWidget(board, 1)
 
         self.page_indexes["messages"] = self.page_stack.addWidget(page)
@@ -762,10 +794,76 @@ class MainWindow(QMainWindow):
         self._set_metric_value("summary_count", "0")
 
     def _clear_messages(self) -> None:
+        self._message_entries.clear()
         self.error_table.setRowCount(0)
         self._message_candidates.clear()
+        self._update_message_filter_summary()
 
     def _append_message_row(
+        self,
+        message_type: str,
+        content: str,
+        candidate: UnmappedCandidate | None = None,
+    ) -> None:
+        self._message_entries.append(
+            MessageEntry(
+                message_type=message_type,
+                content=content,
+                candidate=candidate,
+            )
+        )
+        self._refresh_message_table()
+
+    def _refresh_message_table(self) -> None:
+        self.error_table.setRowCount(0)
+        self._message_candidates.clear()
+        for entry in self._filtered_message_entries():
+            self._render_message_row(entry.message_type, entry.content, candidate=entry.candidate)
+        self.error_table.resizeRowsToContents()
+        self._update_message_filter_summary()
+
+    def _message_filter_mode(self) -> str:
+        if not hasattr(self, "message_filter_combo"):
+            return "all"
+        return str(self.message_filter_combo.currentData() or "all")
+
+    def _filtered_message_entries(self) -> list[MessageEntry]:
+        mode = self._message_filter_mode()
+        if mode == "unmapped":
+            return [entry for entry in self._message_entries if entry.candidate is not None]
+        if mode == "error":
+            return [entry for entry in self._message_entries if entry.message_type == "异常"]
+        return list(self._message_entries)
+
+    def _update_message_filter_summary(self) -> None:
+        if not hasattr(self, "message_filter_summary"):
+            return
+        total_count = len(self._message_entries)
+        visible_entries = self._filtered_message_entries()
+        unmapped_count = sum(1 for entry in visible_entries if entry.candidate is not None)
+        self.message_filter_summary.setText(
+            f"当前显示 {len(visible_entries)} 条消息，其中可加入映射 {unmapped_count} 条；全部消息共 {total_count} 条"
+        )
+        self.add_filtered_mapping_button.setEnabled(unmapped_count > 0)
+
+    def _visible_message_candidates(self) -> list[UnmappedCandidate]:
+        candidates: list[UnmappedCandidate] = []
+        seen_keys: set[tuple[str, str]] = set()
+        for entry in self._filtered_message_entries():
+            if entry.candidate is None:
+                continue
+            dedupe_key = (entry.candidate.platform, entry.candidate.match_key)
+            if dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
+            candidates.append(entry.candidate)
+        return candidates
+
+    def _selected_message_candidates(self) -> list[UnmappedCandidate]:
+        rows = self._checked_message_rows() or sorted({index.row() for index in self.error_table.selectedIndexes()})
+        return [self._message_candidates[row] for row in rows if row in self._message_candidates]
+
+    def _render_message_row(
         self,
         message_type: str,
         content: str,
@@ -1393,12 +1491,19 @@ class MainWindow(QMainWindow):
         QMessageBox.information(self, "完成", f"已复制 {len(messages)} 条异常信息。")
 
     def _add_selected_messages_to_mapping(self) -> None:
-        rows = self._checked_message_rows() or sorted({index.row() for index in self.error_table.selectedIndexes()})
+        selected_candidates = self._selected_message_candidates()
+        if not selected_candidates:
+            QMessageBox.information(self, "提示", "请先勾选或选中要加入映射的未匹配提醒。")
+            return
+        self._add_candidates_to_mapping(
+            selected_candidates,
+            empty_message="当前选中项里没有可加入映射的未匹配提醒。",
+        )
+        return
         if not rows:
             QMessageBox.information(self, "提示", "请先勾选或选中要加入映射的未匹配提醒。")
             return
 
-        selected_candidates = [self._message_candidates[row] for row in rows if row in self._message_candidates]
         if not selected_candidates:
             QMessageBox.information(self, "提示", "当前选中项里没有可加入映射的未匹配提醒。")
             return
@@ -1438,6 +1543,68 @@ class MainWindow(QMainWindow):
 
         if added_count <= 0:
             QMessageBox.information(self, "提示", "所选未匹配项已存在于分类映射表中。")
+            return
+
+        self.mapping_dirty = True
+        self.mapping_table.resizeRowsToContents()
+        self.mapping_table.setCurrentCell(self.mapping_table.rowCount() - 1, 0)
+        QMessageBox.information(
+            self,
+            "已加入映射",
+            f"已将 {added_count} 条未匹配项加入分类映射表，请检查分类后再保存并上传云端。",
+        )
+
+    def _add_filtered_messages_to_mapping(self) -> None:
+        visible_candidates = self._visible_message_candidates()
+        if not visible_candidates:
+            QMessageBox.information(self, "提示", "当前筛选结果里没有可加入映射的未匹配提醒。")
+            return
+        self._add_candidates_to_mapping(
+            visible_candidates,
+            empty_message="当前筛选结果已全部存在于分类映射表中。",
+        )
+
+    def _add_candidates_to_mapping(
+        self,
+        candidates: list[UnmappedCandidate],
+        *,
+        empty_message: str,
+    ) -> None:
+        self._navigate_to_page("mapping", run_mapping_check=False)
+        existing_keys = {
+            (
+                self._table_text(self.mapping_table, row, 0),
+                self._build_match_key_from_values(
+                    self._table_text(self.mapping_table, row, 0),
+                    self._table_text(self.mapping_table, row, 1),
+                    self._table_text(self.mapping_table, row, 2),
+                ),
+            )
+            for row in range(self.mapping_table.rowCount())
+        }
+
+        added_count = 0
+        for candidate in candidates:
+            dedupe_key = (candidate.platform, candidate.match_key)
+            if dedupe_key in existing_keys:
+                continue
+            self._loading_mapping_table = True
+            self._append_mapping_rule(
+                MappingRule(
+                    platform=candidate.platform,
+                    match_key="",
+                    remark_norm=candidate.remark_norm,
+                    biz_desc=candidate.biz_desc,
+                    detail_category="暂未分类",
+                    major_category="暂未分类",
+                )
+            )
+            self._loading_mapping_table = False
+            existing_keys.add(dedupe_key)
+            added_count += 1
+
+        if added_count <= 0:
+            QMessageBox.information(self, "提示", empty_message)
             return
 
         self.mapping_dirty = True
