@@ -179,7 +179,7 @@ class MainWindow(QMainWindow):
         self._message_entries: list[MessageEntry] = []
         self._message_candidates: dict[int, UnmappedCandidate] = {}
 
-        self.setWindowTitle("财务统计小工具 V2.4")
+        self.setWindowTitle("财务统计小工具 V2.5")
         self.resize(1340, 900)
         self.setMinimumSize(1180, 760)
         self._build_ui()
@@ -245,7 +245,7 @@ class MainWindow(QMainWindow):
         brand_title = QLabel("财务统计小工具")
         brand_title.setObjectName("BrandTitle")
         brand_layout.addWidget(brand_title)
-        brand_version = QLabel("V2.4")
+        brand_version = QLabel("V2.5")
         brand_version.setObjectName("BrandVersion")
         brand_layout.addWidget(brand_version)
         brand_layout.addStretch(1)
