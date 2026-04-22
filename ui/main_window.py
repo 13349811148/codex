@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -143,6 +144,10 @@ class MappingPublishWorker(QObject):
 
 class MainWindow(QMainWindow):
     MAPPING_HEADERS = ["平台", "标准化备注", "业务描述", "明细分类", "大类"]
+    FILTER_ALL = "__all__"
+    FILTER_PENDING = "pending"
+    FILTER_COMPLETED = "completed"
+    PENDING_MAPPING_TEXT = "暂未分类"
 
     def __init__(
         self,
@@ -179,10 +184,11 @@ class MainWindow(QMainWindow):
         self._message_entries: list[MessageEntry] = []
         self._message_candidates: dict[int, UnmappedCandidate] = {}
 
-        self.setWindowTitle("财务统计小工具 V2.6")
+        self.setWindowTitle("财务统计小工具 V2.7")
         self.resize(1340, 900)
         self.setMinimumSize(1180, 760)
         self._build_ui()
+        self._configure_mapping_table_shortcuts()
         self._load_defaults()
         QTimer.singleShot(700, self._run_startup_mapping_check)
 
@@ -245,7 +251,7 @@ class MainWindow(QMainWindow):
         brand_title = QLabel("财务统计小工具")
         brand_title.setObjectName("BrandTitle")
         brand_layout.addWidget(brand_title)
-        brand_version = QLabel("V2.6")
+        brand_version = QLabel("V2.7")
         brand_version.setObjectName("BrandVersion")
         brand_layout.addWidget(brand_version)
         brand_layout.addStretch(1)
@@ -488,14 +494,51 @@ class MainWindow(QMainWindow):
         self.mapping_delete_button = QPushButton("删除选中")
         self.mapping_delete_button.setObjectName("SecondaryButton")
         self.mapping_delete_button.clicked.connect(self._delete_selected_mapping_rows)
+        self.mapping_copy_button = QPushButton("复制单元格")
+        self.mapping_copy_button.setObjectName("SecondaryButton")
+        self.mapping_copy_button.clicked.connect(self._copy_selected_mapping_cells)
+        self.mapping_fill_button = QPushButton("向下填充选中")
+        self.mapping_fill_button.setObjectName("SecondaryButton")
+        self.mapping_fill_button.clicked.connect(self._fill_selected_mapping_cells)
         table_head.addWidget(self.mapping_add_button)
         table_head.addWidget(self.mapping_delete_button)
+        table_head.addWidget(self.mapping_copy_button)
+        table_head.addWidget(self.mapping_fill_button)
         table_layout.addLayout(table_head)
+
+        filter_row = QHBoxLayout()
+        filter_row.setSpacing(10)
+        mapping_filter_label = QLabel("规则筛选")
+        mapping_filter_label.setObjectName("PathTag")
+        self.mapping_platform_filter_combo = QComboBox()
+        self.mapping_platform_filter_combo.addItem("全部平台", self.FILTER_ALL)
+        for platform in self.mapping_editor_service.SUPPORTED_PLATFORMS:
+            self.mapping_platform_filter_combo.addItem(platform, platform)
+        self.mapping_platform_filter_combo.currentIndexChanged.connect(lambda _index: self._apply_mapping_filters())
+        self.mapping_status_filter_combo = QComboBox()
+        self.mapping_status_filter_combo.addItem("全部状态", self.FILTER_ALL)
+        self.mapping_status_filter_combo.addItem("仅待补齐", self.FILTER_PENDING)
+        self.mapping_status_filter_combo.addItem("仅已完成", self.FILTER_COMPLETED)
+        self.mapping_status_filter_combo.currentIndexChanged.connect(lambda _index: self._apply_mapping_filters())
+        self.mapping_search_edit = QLineEdit()
+        self.mapping_search_edit.setObjectName("FolderEdit")
+        self.mapping_search_edit.setClearButtonEnabled(True)
+        self.mapping_search_edit.setPlaceholderText("按平台 / 备注 / 业务描述 / 分类关键词筛选")
+        self.mapping_search_edit.textChanged.connect(lambda _text: self._apply_mapping_filters())
+        self.mapping_filter_summary = QLabel("")
+        self.mapping_filter_summary.setObjectName("BoardDesc")
+        self.mapping_filter_summary.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        filter_row.addWidget(mapping_filter_label)
+        filter_row.addWidget(self.mapping_platform_filter_combo)
+        filter_row.addWidget(self.mapping_status_filter_combo)
+        filter_row.addWidget(self.mapping_search_edit, 1)
+        filter_row.addWidget(self.mapping_filter_summary, 1)
+        table_layout.addLayout(filter_row)
 
         self.mapping_table = QTableWidget(0, len(self.MAPPING_HEADERS))
         self.mapping_table.setHorizontalHeaderLabels(self.MAPPING_HEADERS)
         self.mapping_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.mapping_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.mapping_table.setSelectionBehavior(QAbstractItemView.SelectItems)
         self.mapping_table.setAlternatingRowColors(True)
         self.mapping_table.verticalHeader().setVisible(False)
         self.mapping_table.horizontalHeader().setStretchLastSection(True)
@@ -508,6 +551,10 @@ class MainWindow(QMainWindow):
         )
         self.mapping_table.itemChanged.connect(self._on_mapping_item_changed)
         table_layout.addWidget(self.mapping_table)
+        mapping_hint = QLabel("支持按筛选结果查看待补齐规则；表格支持 Ctrl+C / Ctrl+V / Ctrl+D / Delete，便于像 Excel 一样批量补齐映射。")
+        mapping_hint.setObjectName("BoardDesc")
+        mapping_hint.setWordWrap(True)
+        table_layout.addWidget(mapping_hint)
         layout.addWidget(table_board, 1)
 
         self.page_indexes["mapping"] = self.page_stack.addWidget(page)
@@ -560,11 +607,21 @@ class MainWindow(QMainWindow):
         self.message_filter_combo.addItem("仅未匹配映射提醒", "unmapped")
         self.message_filter_combo.addItem("仅异常消息", "error")
         self.message_filter_combo.currentIndexChanged.connect(lambda _index: self._refresh_message_table())
+        self.message_platform_filter_combo = QComboBox()
+        self.message_platform_filter_combo.addItem("全部平台", self.FILTER_ALL)
+        self.message_platform_filter_combo.currentIndexChanged.connect(lambda _index: self._refresh_message_table())
+        self.message_search_edit = QLineEdit()
+        self.message_search_edit.setObjectName("FolderEdit")
+        self.message_search_edit.setClearButtonEnabled(True)
+        self.message_search_edit.setPlaceholderText("按平台 / 店铺 / 备注 / 业务描述 / 原消息关键词筛选")
+        self.message_search_edit.textChanged.connect(lambda _text: self._refresh_message_table())
         self.message_filter_summary = QLabel("")
         self.message_filter_summary.setObjectName("BoardDesc")
         self.message_filter_summary.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         filter_row.addWidget(filter_label)
         filter_row.addWidget(self.message_filter_combo)
+        filter_row.addWidget(self.message_platform_filter_combo)
+        filter_row.addWidget(self.message_search_edit, 1)
         filter_row.addWidget(self.message_filter_summary, 1)
         filter_row.addWidget(self.add_filtered_mapping_button)
         board_layout.addLayout(filter_row)
@@ -797,6 +854,7 @@ class MainWindow(QMainWindow):
         self._message_entries.clear()
         self.error_table.setRowCount(0)
         self._message_candidates.clear()
+        self._update_message_platform_filter_options()
         self._update_message_filter_summary()
 
     def _append_message_row(
@@ -804,6 +862,8 @@ class MainWindow(QMainWindow):
         message_type: str,
         content: str,
         candidate: UnmappedCandidate | None = None,
+        *,
+        refresh: bool = True,
     ) -> None:
         self._message_entries.append(
             MessageEntry(
@@ -812,7 +872,9 @@ class MainWindow(QMainWindow):
                 candidate=candidate,
             )
         )
-        self._refresh_message_table()
+        if refresh:
+            self._update_message_platform_filter_options()
+            self._refresh_message_table()
 
     def _refresh_message_table(self) -> None:
         self.error_table.setRowCount(0)
@@ -829,11 +891,62 @@ class MainWindow(QMainWindow):
 
     def _filtered_message_entries(self) -> list[MessageEntry]:
         mode = self._message_filter_mode()
-        if mode == "unmapped":
-            return [entry for entry in self._message_entries if entry.candidate is not None]
-        if mode == "error":
-            return [entry for entry in self._message_entries if entry.message_type == "异常"]
-        return list(self._message_entries)
+        platform_filter = self._message_platform_filter_value()
+        keyword = self._message_filter_keyword()
+        filtered_entries: list[MessageEntry] = []
+        for entry in self._message_entries:
+            if mode == "unmapped" and entry.candidate is None:
+                continue
+            if mode == "error" and entry.message_type == "异常":
+                pass
+            elif mode == "error":
+                continue
+            if platform_filter != self.FILTER_ALL:
+                platform = entry.candidate.platform if entry.candidate is not None else ""
+                if platform != platform_filter:
+                    continue
+            if keyword and keyword not in self._message_entry_search_text(entry):
+                continue
+            filtered_entries.append(entry)
+        return filtered_entries
+
+    def _message_platform_filter_value(self) -> str:
+        if not hasattr(self, "message_platform_filter_combo"):
+            return self.FILTER_ALL
+        return str(self.message_platform_filter_combo.currentData() or self.FILTER_ALL)
+
+    def _message_filter_keyword(self) -> str:
+        if not hasattr(self, "message_search_edit"):
+            return ""
+        return self.message_search_edit.text().strip().lower()
+
+    def _message_entry_search_text(self, entry: MessageEntry) -> str:
+        parts = [entry.message_type, entry.content]
+        if entry.candidate is not None:
+            parts.extend(
+                [
+                    entry.candidate.platform,
+                    entry.candidate.store_name,
+                    entry.candidate.remark_norm,
+                    entry.candidate.biz_desc,
+                    entry.candidate.match_key,
+                ]
+            )
+        return " ".join(part for part in parts if part).lower()
+
+    def _update_message_platform_filter_options(self) -> None:
+        if not hasattr(self, "message_platform_filter_combo"):
+            return
+        current_value = str(self.message_platform_filter_combo.currentData() or self.FILTER_ALL)
+        platforms = sorted({entry.candidate.platform for entry in self._message_entries if entry.candidate is not None})
+        self.message_platform_filter_combo.blockSignals(True)
+        self.message_platform_filter_combo.clear()
+        self.message_platform_filter_combo.addItem("全部平台", self.FILTER_ALL)
+        for platform in platforms:
+            self.message_platform_filter_combo.addItem(platform, platform)
+        target_index = self.message_platform_filter_combo.findData(current_value)
+        self.message_platform_filter_combo.setCurrentIndex(target_index if target_index >= 0 else 0)
+        self.message_platform_filter_combo.blockSignals(False)
 
     def _update_message_filter_summary(self) -> None:
         if not hasattr(self, "message_filter_summary"):
@@ -1010,6 +1123,7 @@ class MainWindow(QMainWindow):
         self.mapping_table.resizeRowsToContents()
         self._loading_mapping_table = False
         self.mapping_dirty = False
+        self._apply_mapping_filters()
 
     def _append_mapping_rule(self, rule: MappingRule) -> None:
         row = self.mapping_table.rowCount()
@@ -1019,6 +1133,232 @@ class MainWindow(QMainWindow):
             item = QTableWidgetItem(value)
             item.setToolTip(str(value))
             self.mapping_table.setItem(row, column, item)
+
+    def _configure_mapping_table_shortcuts(self) -> None:
+        self.mapping_copy_shortcut = QShortcut(QKeySequence.Copy, self.mapping_table)
+        self.mapping_copy_shortcut.setContext(Qt.WidgetShortcut)
+        self.mapping_copy_shortcut.activated.connect(self._copy_selected_mapping_cells)
+
+        self.mapping_paste_shortcut = QShortcut(QKeySequence.Paste, self.mapping_table)
+        self.mapping_paste_shortcut.setContext(Qt.WidgetShortcut)
+        self.mapping_paste_shortcut.activated.connect(self._paste_mapping_cells)
+
+        self.mapping_fill_shortcut = QShortcut(QKeySequence("Ctrl+D"), self.mapping_table)
+        self.mapping_fill_shortcut.setContext(Qt.WidgetShortcut)
+        self.mapping_fill_shortcut.activated.connect(self._fill_selected_mapping_cells)
+
+        self.mapping_delete_shortcut = QShortcut(QKeySequence("Delete"), self.mapping_table)
+        self.mapping_delete_shortcut.setContext(Qt.WidgetShortcut)
+        self.mapping_delete_shortcut.activated.connect(self._clear_selected_mapping_cells)
+
+    def _mapping_platform_filter_value(self) -> str:
+        if not hasattr(self, "mapping_platform_filter_combo"):
+            return self.FILTER_ALL
+        return str(self.mapping_platform_filter_combo.currentData() or self.FILTER_ALL)
+
+    def _mapping_status_filter_value(self) -> str:
+        if not hasattr(self, "mapping_status_filter_combo"):
+            return self.FILTER_ALL
+        return str(self.mapping_status_filter_combo.currentData() or self.FILTER_ALL)
+
+    def _mapping_filter_keyword(self) -> str:
+        if not hasattr(self, "mapping_search_edit"):
+            return ""
+        return self.mapping_search_edit.text().strip().lower()
+
+    def _apply_mapping_filters(self) -> None:
+        if not hasattr(self, "mapping_table"):
+            return
+        platform_filter = self._mapping_platform_filter_value()
+        status_filter = self._mapping_status_filter_value()
+        keyword = self._mapping_filter_keyword()
+        total_count = self.mapping_table.rowCount()
+        visible_count = 0
+        pending_total = 0
+        pending_visible = 0
+
+        for row in range(total_count):
+            platform = self._table_text(self.mapping_table, row, 0)
+            remark_norm = self._table_text(self.mapping_table, row, 1)
+            biz_desc = self._table_text(self.mapping_table, row, 2)
+            detail_category = self._table_text(self.mapping_table, row, 3)
+            major_category = self._table_text(self.mapping_table, row, 4)
+
+            is_pending = self._is_pending_mapping_row(detail_category, major_category)
+            if is_pending:
+                pending_total += 1
+
+            matches_platform = platform_filter == self.FILTER_ALL or platform == platform_filter
+            matches_status = (
+                status_filter == self.FILTER_ALL
+                or (status_filter == self.FILTER_PENDING and is_pending)
+                or (status_filter == self.FILTER_COMPLETED and not is_pending)
+            )
+            search_text = " ".join(
+                value for value in (platform, remark_norm, biz_desc, detail_category, major_category) if value
+            ).lower()
+            matches_keyword = not keyword or keyword in search_text
+            is_visible = matches_platform and matches_status and matches_keyword
+            self.mapping_table.setRowHidden(row, not is_visible)
+            if is_visible:
+                visible_count += 1
+                if is_pending:
+                    pending_visible += 1
+
+        if hasattr(self, "mapping_filter_summary"):
+            self.mapping_filter_summary.setText(
+                f"当前显示 {visible_count} / {total_count} 条，待补齐 {pending_visible} / {pending_total} 条"
+            )
+
+    def _is_pending_mapping_row(self, detail_category: str, major_category: str) -> bool:
+        return detail_category.strip() in {"", self.PENDING_MAPPING_TEXT} or major_category.strip() in {
+            "",
+            self.PENDING_MAPPING_TEXT,
+        }
+
+    def _selected_mapping_indexes(self) -> list:
+        indexes = self.mapping_table.selectedIndexes()
+        if indexes:
+            return sorted(indexes, key=lambda item: (item.row(), item.column()))
+        current_row = self.mapping_table.currentRow()
+        current_column = self.mapping_table.currentColumn()
+        if current_row < 0 or current_column < 0:
+            return []
+        current_item = self.mapping_table.model().index(current_row, current_column)
+        return [current_item]
+
+    def _selected_mapping_cell_bounds(self) -> tuple[int, int, int, int] | None:
+        indexes = self._selected_mapping_indexes()
+        if not indexes:
+            return None
+        rows = [index.row() for index in indexes]
+        columns = [index.column() for index in indexes]
+        return min(rows), max(rows), min(columns), max(columns)
+
+    def _ensure_mapping_item(self, row: int, column: int) -> QTableWidgetItem:
+        item = self.mapping_table.item(row, column)
+        if item is None:
+            item = QTableWidgetItem("")
+            self.mapping_table.setItem(row, column, item)
+        return item
+
+    def _create_blank_mapping_rule(self, platform: str = "淘宝") -> MappingRule:
+        return MappingRule(
+            platform=platform,
+            match_key="",
+            remark_norm="[空]",
+            biz_desc="[空]",
+            detail_category="",
+            major_category="",
+        )
+
+    def _copy_selected_mapping_cells(self) -> None:
+        indexes = self._selected_mapping_indexes()
+        if not indexes:
+            QMessageBox.information(self, "提示", "请先选择要复制的单元格。")
+            return
+        bounds = self._selected_mapping_cell_bounds()
+        if bounds is None:
+            return
+        top_row, bottom_row, left_column, right_column = bounds
+        selected_cells = {(index.row(), index.column()) for index in indexes}
+        lines: list[str] = []
+        for row in range(top_row, bottom_row + 1):
+            row_values: list[str] = []
+            for column in range(left_column, right_column + 1):
+                value = self._table_text(self.mapping_table, row, column) if (row, column) in selected_cells else ""
+                row_values.append(value)
+            lines.append("\t".join(row_values))
+        QApplication.clipboard().setText("\n".join(lines))
+
+    def _paste_mapping_cells(self) -> None:
+        raw_text = QApplication.clipboard().text()
+        if not raw_text.strip():
+            return
+
+        start_row = self.mapping_table.currentRow()
+        start_column = self.mapping_table.currentColumn()
+        if start_row < 0 or start_column < 0:
+            if self.mapping_table.rowCount() == 0:
+                self._loading_mapping_table = True
+                self._append_mapping_rule(self._create_blank_mapping_rule())
+                self._loading_mapping_table = False
+            start_row = max(self.mapping_table.currentRow(), 0)
+            start_column = max(self.mapping_table.currentColumn(), 0)
+            if start_column < 0:
+                start_column = 0
+
+        rows = [line.split("\t") for line in raw_text.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+        while rows and rows[-1] == [""]:
+            rows.pop()
+        if not rows:
+            return
+
+        self._loading_mapping_table = True
+        try:
+            for row_offset, values in enumerate(rows):
+                target_row = start_row + row_offset
+                while target_row >= self.mapping_table.rowCount():
+                    self._append_mapping_rule(self._create_blank_mapping_rule())
+                for column_offset, value in enumerate(values):
+                    target_column = start_column + column_offset
+                    if target_column >= self.mapping_table.columnCount():
+                        continue
+                    item = self._ensure_mapping_item(target_row, target_column)
+                    item.setText(value)
+                    item.setToolTip(value)
+        finally:
+            self._loading_mapping_table = False
+
+        self.mapping_dirty = True
+        self.mapping_table.resizeRowsToContents()
+        self._apply_mapping_filters()
+
+    def _fill_selected_mapping_cells(self) -> None:
+        indexes = self._selected_mapping_indexes()
+        if len(indexes) <= 1:
+            QMessageBox.information(self, "提示", "请至少选择两个单元格，再执行向下填充。")
+            return
+
+        selected_by_column: dict[int, list[int]] = {}
+        for index in indexes:
+            selected_by_column.setdefault(index.column(), []).append(index.row())
+
+        self._loading_mapping_table = True
+        try:
+            for column, rows in selected_by_column.items():
+                unique_rows = sorted(set(rows))
+                if len(unique_rows) <= 1:
+                    continue
+                source_row = unique_rows[0]
+                source_text = self._table_text(self.mapping_table, source_row, column)
+                for target_row in unique_rows[1:]:
+                    item = self._ensure_mapping_item(target_row, column)
+                    item.setText(source_text)
+                    item.setToolTip(source_text)
+        finally:
+            self._loading_mapping_table = False
+
+        self.mapping_dirty = True
+        self.mapping_table.resizeRowsToContents()
+        self._apply_mapping_filters()
+
+    def _clear_selected_mapping_cells(self) -> None:
+        indexes = self._selected_mapping_indexes()
+        if not indexes:
+            return
+
+        self._loading_mapping_table = True
+        try:
+            for index in indexes:
+                item = self._ensure_mapping_item(index.row(), index.column())
+                item.setText("")
+                item.setToolTip("")
+        finally:
+            self._loading_mapping_table = False
+
+        self.mapping_dirty = True
+        self._apply_mapping_filters()
 
     def _is_busy(self) -> bool:
         return any(
@@ -1241,11 +1581,12 @@ class MainWindow(QMainWindow):
         self._clear_messages()
 
         for error in result.errors:
-            self._append_message_row("异常", error)
+            self._append_message_row("异常", error, refresh=False)
         for warning in result.warnings:
             candidate = next((item for item in result.unmapped_candidates if item.warning_message == warning), None)
-            self._append_message_row("提醒", warning, candidate=candidate)
-        self.error_table.resizeRowsToContents()
+            self._append_message_row("提醒", warning, candidate=candidate, refresh=False)
+        self._update_message_platform_filter_options()
+        self._refresh_message_table()
 
         self._set_running_state(False)
         if result.export_path:
@@ -1430,6 +1771,11 @@ class MainWindow(QMainWindow):
         self.mapping_save_button.setEnabled(enabled)
         self.mapping_add_button.setEnabled(enabled)
         self.mapping_delete_button.setEnabled(enabled)
+        self.mapping_copy_button.setEnabled(enabled)
+        self.mapping_fill_button.setEnabled(enabled)
+        self.mapping_platform_filter_combo.setEnabled(enabled)
+        self.mapping_status_filter_combo.setEnabled(enabled)
+        self.mapping_search_edit.setEnabled(enabled)
         self.wps_config_save_button.setEnabled(enabled)
         self.wps_share_url_edit.setEnabled(enabled)
         self.wps_file_id_edit.setEnabled(enabled)
@@ -1438,28 +1784,25 @@ class MainWindow(QMainWindow):
         self.wps_app_secret_edit.setEnabled(enabled)
         self.wps_redirect_uri_edit.setEnabled(enabled)
         self.add_mapping_button.setEnabled(enabled)
+        self.add_filtered_mapping_button.setEnabled(enabled and any(entry.candidate is not None for entry in self._filtered_message_entries()))
         self.copy_selected_button.setEnabled(enabled)
         self.copy_all_button.setEnabled(enabled)
+        self.message_filter_combo.setEnabled(enabled)
+        self.message_platform_filter_combo.setEnabled(enabled)
+        self.message_search_edit.setEnabled(enabled)
 
     def _on_mapping_item_changed(self, _item: QTableWidgetItem) -> None:
         if self._loading_mapping_table:
             return
         self.mapping_dirty = True
+        self._apply_mapping_filters()
 
     def _add_mapping_row(self) -> None:
         self._loading_mapping_table = True
-        self._append_mapping_rule(
-            MappingRule(
-                platform="淘宝",
-                match_key="",
-                remark_norm="[空]",
-                biz_desc="[空]",
-                detail_category="",
-                major_category="",
-            )
-        )
+        self._append_mapping_rule(self._create_blank_mapping_rule())
         self._loading_mapping_table = False
         self.mapping_dirty = True
+        self._apply_mapping_filters()
         self.mapping_table.setCurrentCell(self.mapping_table.rowCount() - 1, 0)
 
     def _delete_selected_mapping_rows(self) -> None:
@@ -1472,6 +1815,7 @@ class MainWindow(QMainWindow):
             self.mapping_table.removeRow(row)
         self._loading_mapping_table = False
         self.mapping_dirty = True
+        self._apply_mapping_filters()
 
     def _copy_selected_messages(self) -> None:
         rows = self._checked_message_rows() or sorted({index.row() for index in self.error_table.selectedIndexes()})
@@ -1609,6 +1953,7 @@ class MainWindow(QMainWindow):
 
         self.mapping_dirty = True
         self.mapping_table.resizeRowsToContents()
+        self._apply_mapping_filters()
         self.mapping_table.setCurrentCell(self.mapping_table.rowCount() - 1, 0)
         QMessageBox.information(
             self,
