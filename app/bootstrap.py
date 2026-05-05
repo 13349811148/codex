@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 
 from db.sqlite_manager import SqliteManager
@@ -15,13 +16,18 @@ from services.wps_openapi_client import WpsOpenApiClient
 from ui.main_window import MainWindow
 from utils.paths import get_database_path
 
+
+def _env(name: str, default: str = "") -> str:
+    return os.environ.get(name, default).strip()
+
+
 DEFAULT_WPS_CONFIG = {
-    "wps_app_id": "AK20260420XWYIEG",
-    "wps_app_secret": "4caada5365524cb752a15755ad2b580a",
-    "wps_redirect_uri": "http://127.0.0.1:18765/callback",
-    "wps_share_url": "https://www.kdocs.cn/l/ceP77RuNMY5a",
-    "wps_file_id": "513431252713",
-    "wps_sheet_name": "正式映射",
+    "wps_app_id": _env("WPS_APP_ID"),
+    "wps_app_secret": _env("WPS_APP_SECRET"),
+    "wps_redirect_uri": _env("WPS_REDIRECT_URI", "http://127.0.0.1:18765/callback"),
+    "wps_share_url": _env("WPS_SHARE_URL"),
+    "wps_file_id": _env("WPS_FILE_ID"),
+    "wps_sheet_name": _env("WPS_SHEET_NAME", "正式映射"),
 }
 
 
@@ -43,7 +49,7 @@ class AppServices:
 
 def seed_default_wps_config(config_repo: ConfigRepository) -> None:
     for key, value in DEFAULT_WPS_CONFIG.items():
-        if not config_repo.get(key, "").strip():
+        if value and not config_repo.get(key, "").strip():
             config_repo.set(key, value)
 
 
